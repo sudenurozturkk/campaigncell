@@ -33,17 +33,22 @@ const proxyOptions = (targetUrl) => ({
 // 1. Identity Service Proxies
 router.use('/api/v1/auth', proxy(IDENTITY_SERVICE_URL, {
   ...proxyOptions(IDENTITY_SERVICE_URL),
-  proxyReqPathResolver: (req) => `/api/v1/auth${req.url}`,
+  proxyReqPathResolver: (req) => `/auth${req.url}`,
 }));
 
 router.use('/api/v1/users', proxy(IDENTITY_SERVICE_URL, {
   ...proxyOptions(IDENTITY_SERVICE_URL),
-  proxyReqPathResolver: (req) => `/api/v1/users${req.url}`,
+  proxyReqPathResolver: (req) => `/users${req.url}`,
+}));
+
+router.use('/api/v1/admin', proxy(IDENTITY_SERVICE_URL, {
+  ...proxyOptions(IDENTITY_SERVICE_URL),
+  proxyReqPathResolver: (req) => `/admin${req.url}`,
 }));
 
 router.use('/api/v1/audit-logs', proxy(IDENTITY_SERVICE_URL, {
   ...proxyOptions(IDENTITY_SERVICE_URL),
-  proxyReqPathResolver: (req) => `/api/v1/audit-logs${req.url}`,
+  proxyReqPathResolver: (req) => `/audit-logs${req.url}`,
 }));
 
 // 2. Campaign Service Proxies

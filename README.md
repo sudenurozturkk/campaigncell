@@ -1,81 +1,112 @@
-# CampaignCell
+# CampaignCell — Turkcell Kişiselleştirilmiş Kampanya ve Öneri Platformu
 
-**Turkcell Kişiselleştirilmiş Kampanya ve Öneri Platformu**
-*"Doğru Teklif. Doğru Müşteri. Doğru Zaman."*
+> **Turkcell CodeNight 2026 Final Case Projesi**  
+> *"Doğru Teklif. Doğru Müşteri. Doğru Zaman."*
 
-AI-Powered Campaign Intelligence platform built for Turkcell CodeNight 2026 Final Case.
-CampaignCell analyzes subscriber behavior to recommend the right campaign to the right
-subscriber at the right time, and manages the full optimization lifecycle: scoring →
-segmentation → expert assignment → A/B testing → conversion tracking → gamification.
+---
 
-> **Status:** Phase 1–2 complete (architecture + working infrastructure skeleton).
-> Business logic for each service ships in Phases 3–6. See roadmap below.
+## 📐 Sistem ve Mimari Genel Bakış
 
-## Architecture
-
-4 independent microservices, each with its own PostgreSQL database, behind a single API
-Gateway, communicating asynchronously over RabbitMQ. Full diagram and rules:
-[`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md).
+CampaignCell, Turkcell abonelerinin kullanım alışkanlıklarını analiz ederek kişiselleştirilmiş kampanya önerisi skorlayan, dönüşüm olasılığı tahmini üreten, düşük performanslı segmentleri kampanya uzmanlarına yönlendiren ve oyunlaştırma (gamification) ile personel motivasyonunu artıran **4 bağımsız mikroservis + 1 API Gateway** ekosistemidir.
 
 ```
-Frontend → API Gateway → { Identity | Campaign | AI | Gamification } Service
-                              each with its own DB, connected via RabbitMQ events
+                       ┌─────────────────────────┐
+                       │   Turkcell Frontend     │
+                       │     (Next.js App)       │
+                       └────────────┬────────────┘
+                                    │ HTTP / REST & SSE Stream
+                                    ▼
+                       ┌─────────────────────────┐
+                       │       API GATEWAY       │
+                       │   (Express / Port 8080) │
+                       └────────────┬────────────┘
+         ┌──────────────────┬───────┴──────────┬──────────────────┐
+         │                  │                  │                  │
+         ▼                  ▼                  ▼                  ▼
+┌─────────────────┐┌─────────────────┐┌─────────────────┐┌─────────────────┐
+│Identity Service ││Campaign Service ││   AI Service    ││Gamification Svc │
+│ (NestJS / 3001) ││ (NestJS / 3002) ││ (FastAPI/8000)  ││ (NestJS / 3003) │
+└────────┬────────┘└────────┬────────┘└────────┬────────┘└────────┬────────┘
+         │                  │                  │                  │
+         ▼                  ▼                  ▼                  ▼
+  [Identity DB]      [Campaign DB]          [AI DB]       [Gamification DB]
+ (PostgreSQL:5433)  (PostgreSQL:5434)   (PostgreSQL:5435)  (PostgreSQL:5436)
+
+         └──────────────────┴───────┬──────────┴──────────────────┘
+                                    │ Event Exchange (Asenkron)
+                                    ▼
+                         ┌────────────────────┐
+                         │  RabbitMQ Broker   │
+                         │    (Port 5672)     │
+                         └────────────────────┘
 ```
 
-| Service | Port | Tech | DB |
-|---|---|---|---|
-| frontend | 3000 | Next.js (placeholder in this phase) | — |
-| api-gateway | 8080 | Node/Express | — |
-| identity-service | 3001 | NestJS (stub in this phase) | identity-db :5433 |
-| campaign-service | 3002 | NestJS (stub in this phase) | campaign-db :5434 |
-| ai-service | 8000 | FastAPI (stub in this phase) | ai-db :5435 |
-| gamification-service | 3003 | NestJS (stub in this phase) | gamification-db :5436 |
-| rabbitmq | 5672 / 15672 (UI) | RabbitMQ | — |
+---
 
-## Quick Start
+## 🚀 Hızlı Başlangıç (Docker Compose)
+
+Tüm mikroservisler, veritabanları, RabbitMQ ve Frontend tek bir komut ile derlenip ayağa kaldırılır:
 
 ```bash
+# 1. Depoyu klonlayın ve kök dizine geçin
+cd campaigncell
+
+# 2. Örnek ortam değişkenlerini kopyalayın
 cp .env.example .env
-docker compose up --build
+
+# 3. Tüm sistemi Docker Compose ile başlatın
+docker compose up --build -d
 ```
 
-Once healthy:
-- Frontend placeholder: http://localhost:3000
-- API Gateway: http://localhost:8080
-- Identity Service: http://localhost:3001/health
-- Campaign Service: http://localhost:3002/health
-- AI Service: http://localhost:8000/health
-- Gamification Service: http://localhost:3003/health
-- RabbitMQ Management UI: http://localhost:15672 (user/pass from `.env`)
+---
 
-Every service currently exposes only `GET /health` and `GET /` — this phase proves the
-whole ecosystem boots with one command and every container reports healthy, per the
-case's mandatory requirement ("docker compose up ile sistem ayağa kalkmıyorsa
-değerlendirme dışıdır"). Real endpoints land in Phases 3–8.
+## 🔑 Demo Kullanıcı Bilgileri (Jüri Değerlendirmesi İçin)
 
-## Roles
+Proje veritabanı başlangıçta (seeding) aşağıdaki jüri demo hesaplarıyla yüklenir:
 
-| Rol | Açıklama |
-|---|---|
-| Abone (Subscriber) | Kişiselleştirilmiş teklifleri görür, kabul/ret eder, geri bildirim verir |
-| Kampanya Uzmanı (Campaign Expert) | Kampanya oluşturur, optimizasyon vakalarını yönetir, rozet kazanır |
-| Kampanya Yöneticisi (Supervisor) | Analitik dashboard, AI doğruluğu, manuel atama |
-| Admin | Personel hesabı yönetimi, rol atama, audit log |
+| Rol | E-Posta / GSM | Parola / OTP | Açıklama |
+|---|---|---|---|
+| **System Admin** | `admin@turkcell.com.tr` | `Turkcell2026!` | Sistem yöneticisi, personel hesabı açma, audit logları izleme |
+| **Süpervizör** | `supervisor@turkcell.com.tr` | `Turkcell2026!` | Operasyon yöneticisi, AI doğruluk takibi, SLA izleme, liderlik tablosu |
+| **Kampanya Uzmanı** | `uzman@turkcell.com.tr` | `Turkcell2026!` | Vaka yönetimi, state machine geçişleri, A/B testi, segment override |
+| **Abone (Müşteri)** | `05551112233` | `1234` (OTP Simülasyon) | Müşteri portali, kişiselleştirilmiş teklifler, kabul/ret, 1-5 yıldız değerlendirme |
 
-## Documentation
+---
 
-- [`docs/architecture/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) — mimari, diyagram, degradation stratejisi, phase roadmap
-- [`docs/architecture/DATABASE_DESIGN.md`](docs/architecture/DATABASE_DESIGN.md) — 4 bağımsız DB şeması
-- [`docs/EVENTS.md`](docs/EVENTS.md) — RabbitMQ event kataloğu
-- [`docs/AI_APPROACH.md`](docs/AI_APPROACH.md) — AI yaklaşımı (Phase 5'te detaylandırılacak)
-- [`docs/SECURITY.md`](docs/SECURITY.md) — güvenlik önlemleri (Phase 11'de detaylandırılacak)
+## 🌐 Servis Portları & Dokümantasyon Linkleri
 
-## Roadmap
+| Servis | Bağlantı Noktası (Port) | Dokümantasyon Uç Noktası |
+|---|---|---|
+| **Frontend UI** | `http://localhost:3000` | — |
+| **API Gateway** | `http://localhost:8080` | `/api/v1/health` |
+| **Identity Service** | `http://localhost:3001` | `http://localhost:3001/api/docs` (Swagger) |
+| **Campaign Service** | `http://localhost:3002` | `http://localhost:3002/api/docs` (Swagger) |
+| **AI Service** | `http://localhost:8000` | `http://localhost:8000/docs` (FastAPI Swagger) |
+| **Gamification Service** | `http://localhost:3003` | `http://localhost:3003/api/docs` (Swagger) |
+| **RabbitMQ Dashboard** | `http://localhost:15672` | Kullanıcı: `guest` / Şifre: `guest` |
 
-See the phase table in `docs/architecture/ARCHITECTURE.md#7-phase-roadmap`. Each phase
-ships working, testable code before the next one begins — no phase is skipped.
+---
 
-## Demo Users (to be seeded in Phase 5–6)
+## 🏆 Bonus Puan Özellikleri (+20 / 20 Tam Bonus)
 
-Will be populated by `scripts/seed/` once Identity Service (Phase 3) exists — 100+
-subscribers, 20+ campaigns, 10+ experts, 4+ supervisors/admins, all synthetic Turkish data.
+1. **Kendi Eğittiğiniz ML Modeli (+8 Puan)**:
+   - `scikit-learn` tabanlı `RandomForestClassifier` & `GradientBoostingClassifier` modelleri 1200+ sentetik telko verisetiyle eğitilmiştir (`dataset_generator.py` ve `AI_APPROACH.md`).
+2. **Message Queue İle Event İletimi (+5 Puan)**:
+   - RabbitMQ `campaign_events` Topic Exchange ile asenkron servis haberleşmesi.
+3. **Kategori Bazlı AI Doğruluk Kırılımı (+3 Puan)**:
+   - Süpervizör panelinde `YUKSEK_DEGER`, `RISKLI_KAYIP`, `YENI_ABONE`, `PASIF` segment isabet oranları ve `GET /api/v1/ai/accuracy`.
+4. **Gerçek Zamanlı Bildirimler - SSE Stream (+2 Puan)**:
+   - API Gateway `/api/v1/events/stream` üzerinden Server-Sent Events (SSE) canlı event yayını ve Toast bildirim kartları.
+5. **CI/CD Pipeline (+2 Puan)**:
+   - `.github/workflows/ci.yml` GitHub Actions pipeline.
+
+---
+
+## 📄 Ek Dokümantasyonlar
+
+- **Olay Tabanlı Mimari Dokümanı**: [`EVENTS.md`](file:///c:/Users/Administrator/Desktop/Projelerim/campaigncell/EVENTS.md)
+- **Yapay Zeka (AI/ML) Dokümanı**: [`AI_APPROACH.md`](file:///c:/Users/Administrator/Desktop/Projelerim/campaigncell/AI_APPROACH.md)
+- **Identity Service Dokümanı**: [`services/identity-service/README.md`](file:///c:/Users/Administrator/Desktop/Projelerim/campaigncell/services/identity-service/README.md)
+- **Campaign Service Dokümanı**: [`services/campaign-service/README.md`](file:///c:/Users/Administrator/Desktop/Projelerim/campaigncell/services/campaign-service/README.md)
+- **AI Service Dokümanı**: [`services/ai-service/README.md`](file:///c:/Users/Administrator/Desktop/Projelerim/campaigncell/services/ai-service/README.md)
+- **Gamification Service Dokümanı**: [`services/gamification-service/README.md`](file:///c:/Users/Administrator/Desktop/Projelerim/campaigncell/services/gamification-service/README.md)

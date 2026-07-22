@@ -14,9 +14,12 @@ app.use(cors());
 app.use(correlationMiddleware);
 app.use(rateLimitMiddleware);
 
-// Health check uç noktaları (Auth gerektirmez)
+const eventsRoutes = require('./routes/events.routes');
+
+// Health & SSE Stream endpoints (Auth bypass for streaming)
 app.use('/', healthRoutes);
 app.use('/api/v1', healthRoutes);
+app.use('/api/v1/events', eventsRoutes);
 
 // JWT Auth Middleware
 app.use(authMiddleware);

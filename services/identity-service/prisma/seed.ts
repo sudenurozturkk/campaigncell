@@ -54,6 +54,21 @@ async function main() {
     },
   });
 
+  // 4. Admin User
+  await prisma.user.upsert({
+    where: { email: 'admin@turkcell.com.tr' },
+    update: {},
+    create: {
+      role: RoleEnum.ADMIN,
+      email: 'admin@turkcell.com.tr',
+      passwordHash,
+      firstName: 'Sistem',
+      lastName: 'Yöneticisi (Admin)',
+      region: 'Genel Merkez',
+      expertiseTags: ['Sistem', 'Güvenlik', 'Yönetim'],
+    },
+  });
+
   console.log('Identity Service Seeding Completed Successfully.');
 }
 

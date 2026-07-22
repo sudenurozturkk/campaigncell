@@ -230,6 +230,19 @@ def get_ai_accuracy(db: Session = Depends(get_db)):
         category_breakdown=category_breakdown,
     )
 
+@router.get("/benchmark", summary="Jüri İçin Model Karşılaştırma ve Cross-Validation Benchmark")
+def get_model_benchmark():
+    engine = PredictorEngine()
+    return engine.benchmark_models(num_samples=1000)
+
+@router.get("/feature-importance", summary="Açıklanabilir AI (XAI) Özellik Önem Ağırlıkları")
+def get_feature_importances():
+    engine = PredictorEngine()
+    return {
+        "model_version": engine.version_tag,
+        "feature_importances": engine.get_feature_importances()
+    }
+
 @router.get("/subscribers/{subscriber_id}", response_model=SubscriberProfileResponse, summary="Abone AI Profil Detayı")
 def get_subscriber_profile(subscriber_id: str, db: Session = Depends(get_db)):
     profile = db.query(SubscriberProfile).filter(SubscriberProfile.subscriber_id == subscriber_id).first()

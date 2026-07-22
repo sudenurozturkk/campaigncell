@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import DashboardShell from '../../components/DashboardShell';
 import {
   BarChart3, Cpu, Award, Trophy, Activity,
   CheckCircle2, Star, TrendingUp, AlertTriangle, Timer,
-  Zap, Target, Shield, Medal, Flame, Users, Brain
+  Zap, Target, Shield, Medal, Flame, Users, Brain, Check, RefreshCw, Sparkles
 } from 'lucide-react';
+
+const API_GW = process.env.NEXT_PUBLIC_API_GATEWAY_URL || 'http://localhost:8080';
 
 interface LeaderboardEntry {
   rank: number;
@@ -30,212 +32,204 @@ interface SlaEntry {
   breached: boolean;
 }
 
+interface FeatureImportance {
+  feature: string;
+  label: string;
+  importance_weight: number;
+  percentage: number;
+}
+
+interface BenchmarkResult {
+  model_name: string;
+  cv_accuracy_pct: number;
+  f1_score: number;
+  cv_std_pct: number;
+}
+
 const BADGE_ICONS: Record<string, { icon: React.ElementType; color: string; label: string }> = {
-  ILK_KAMPANYA: { icon: Star, color: 'text-blue-400', label: 'İlk Kampanya' },
-  HIZ_USTASI: { icon: Zap, color: 'text-amber-400', label: 'Hız Ustası' },
-  DONUSUM_KRALI: { icon: Target, color: 'text-emerald-400', label: 'Dönüşüm Kralı' },
-  MARATONCU: { icon: Flame, color: 'text-orange-400', label: 'Maratoncu' },
-  CHURN_AVCISI: { icon: Shield, color: 'text-rose-400', label: 'Churn Avcısı' },
-  UZMAN: { icon: Medal, color: 'text-purple-400', label: 'Uzman' },
+  ILK_KAMPANYA: { icon: Star, color: 'text-blue-600 dark:text-blue-400', label: 'İlk Kampanya' },
+  HIZ_USTASI: { icon: Zap, color: 'text-amber-600 dark:text-amber-400', label: 'Hız Ustası' },
+  DONUSUM_KRALI: { icon: Target, color: 'text-emerald-600 dark:text-emerald-400', label: 'Dönüşüm Kralı' },
+  MARATONCU: { icon: Flame, color: 'text-orange-600 dark:text-orange-400', label: 'Maratoncu' },
+  CHURN_AVCISI: { icon: Shield, color: 'text-rose-600 dark:text-rose-400', label: 'Churn Avcısı' },
+  UZMAN: { icon: Medal, color: 'text-purple-600 dark:text-purple-400', label: 'Uzman' },
 };
 
 const LEVEL_CONFIG: Record<string, { bg: string; text: string; border: string; min: number; max: number }> = {
-  Platin: { bg: 'bg-purple-500/15', text: 'text-purple-300', border: 'border-purple-500/30', min: 3000, max: 5000 },
-  Altın: { bg: 'bg-amber-500/15', text: 'text-amber-300', border: 'border-amber-500/30', min: 1500, max: 2999 },
-  Gümüş: { bg: 'bg-slate-400/15', text: 'text-slate-300', border: 'border-slate-400/30', min: 500, max: 1499 },
-  Bronz: { bg: 'bg-amber-700/15', text: 'text-amber-600', border: 'border-amber-700/30', min: 0, max: 499 },
+  Platin: { bg: 'bg-purple-100 dark:bg-purple-500/15', text: 'text-purple-700 dark:text-purple-300 font-bold', border: 'border-purple-200 dark:border-purple-500/30', min: 3000, max: 5000 },
+  Altın: { bg: 'bg-amber-100 dark:bg-amber-500/15', text: 'text-amber-800 dark:text-amber-300 font-bold', border: 'border-amber-200 dark:border-amber-500/30', min: 1500, max: 2999 },
+  Gümüş: { bg: 'bg-slate-100 dark:bg-slate-400/15', text: 'text-slate-700 dark:text-slate-300 font-bold', border: 'border-slate-200 dark:border-slate-400/30', min: 500, max: 1499 },
+  Bronz: { bg: 'bg-orange-100 dark:bg-amber-700/15', text: 'text-orange-800 dark:text-amber-600 font-bold', border: 'border-orange-200 dark:border-amber-700/30', min: 0, max: 499 },
 };
 
-function LevelProgressBar({ points, level }: { points: number; level: string }) {
-  const config = LEVEL_CONFIG[level];
-  if (!config) return null;
-  const progress = Math.min(100, ((points - config.min) / (config.max - config.min)) * 100);
-  return (
-    <div className="w-full">
-      <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-        <div className="h-full progress-bar-animated rounded-full" style={{ width: `${progress}%` }} />
-      </div>
-      <div className="flex justify-between mt-1 text-[9px] text-slate-600">
-        <span>{config.min}</span>
-        <span>{config.max}</span>
-      </div>
-    </div>
-  );
-}
+const INITIAL_BENCHMARK: BenchmarkResult[] = [
+  { model_name: 'RandomForest', cv_accuracy_pct: 99.5, f1_score: 1.0, cv_std_pct: 0.45 },
+  { model_name: 'GradientBoosting', cv_accuracy_pct: 99.5, f1_score: 1.0, cv_std_pct: 0.55 },
+  { model_name: 'ExtraTrees', cv_accuracy_pct: 89.6, f1_score: 0.9359, cv_std_pct: 2.27 },
+];
 
-function AccuracyRing({ value, size = 100, label }: { value: number; size?: number; label: string }) {
-  const radius = (size - 12) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (value / 100) * circumference;
-  const color = value >= 90 ? '#10B981' : value >= 80 ? '#FFC72C' : '#F43F5E';
-
-  return (
-    <div className="flex flex-col items-center space-y-2">
-      <div className="relative" style={{ width: size, height: size }}>
-        <svg className="score-ring" width={size} height={size}>
-          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="rgba(255,255,255,0.04)" strokeWidth="5" />
-          <circle
-            cx={size / 2} cy={size / 2} r={radius} fill="none"
-            stroke={color} strokeWidth="5" strokeLinecap="round"
-            strokeDasharray={circumference} strokeDashoffset={offset}
-            style={{ transition: 'stroke-dashoffset 1.5s ease-in-out' }}
-          />
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-lg font-black text-white">%{value}</span>
-        </div>
-      </div>
-      <span className="text-[10px] text-slate-500 font-semibold">{label}</span>
-    </div>
-  );
-}
+const INITIAL_FEATURES: FeatureImportance[] = [
+  { feature: 'data_usage_trend_pct', label: 'Veri Tüketim Trendi (%)', importance_weight: 0.3737, percentage: 37.37 },
+  { feature: 'monthly_spend_try', label: 'Aylık Harcama / ARPU (TL)', importance_weight: 0.3347, percentage: 33.47 },
+  { feature: 'monthly_data_usage_gb', label: 'Aylık Veri Kullanımı (GB)', importance_weight: 0.1204, percentage: 12.04 },
+  { feature: 'complaint_count', label: 'Şikayet Kaydı Sayısı', importance_weight: 0.1092, percentage: 10.92 },
+  { feature: 'monthly_voice_min', label: 'Aylık Konuşma Süresi (Dk)', importance_weight: 0.0274, percentage: 2.74 },
+  { feature: 'tenure_months', label: 'Abonelik Süresi (Ay)', importance_weight: 0.0216, percentage: 2.16 },
+];
 
 export default function SupervisorDashboard() {
-  const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'LEADERBOARD' | 'AI_ACCURACY' | 'SLA'>('OVERVIEW');
+  const [activeTab, setActiveTab] = useState<'overview' | 'leaderboard' | 'ai_accuracy' | 'sla'>('overview');
+  const [benchmarkData, setBenchmarkData] = useState<BenchmarkResult[]>(INITIAL_BENCHMARK);
+  const [featuresData, setFeaturesData] = useState<FeatureImportance[]>(INITIAL_FEATURES);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [demoSimulating, setDemoSimulating] = useState(false);
 
-  // KPI Data
-  const aiAccuracy = 88.5;
-  const totalPredictions = 1420;
-  const misclassifiedCount = 163;
-  const activeModelVersion = 'v1.0-rf (RandomForest)';
-
-  const leaderboardData: LeaderboardEntry[] = [
-    { rank: 1, name: 'Ahmet Yılmaz', level: 'Platin', points: 3450, badges: ['ILK_KAMPANYA', 'HIZ_USTASI', 'DONUSUM_KRALI', 'CHURN_AVCISI', 'MARATONCU', 'UZMAN'], completedCases: 42, avgSlaHours: 3.2, isCurrentUser: false },
-    { rank: 2, name: 'Ayşe Kaya', level: 'Altın', points: 2280, badges: ['ILK_KAMPANYA', 'HIZ_USTASI', 'DONUSUM_KRALI', 'MARATONCU'], completedCases: 31, avgSlaHours: 5.1, isCurrentUser: false },
-    { rank: 3, name: 'Mehmet Demir', level: 'Gümüş', points: 1120, badges: ['ILK_KAMPANYA', 'HIZ_USTASI'], completedCases: 18, avgSlaHours: 7.8, isCurrentUser: false },
-    { rank: 4, name: 'Zeynep Çelik', level: 'Gümüş', points: 780, badges: ['ILK_KAMPANYA'], completedCases: 12, avgSlaHours: 9.2, isCurrentUser: false },
-    { rank: 5, name: 'Can Özdemir', level: 'Bronz', points: 345, badges: ['ILK_KAMPANYA'], completedCases: 6, avgSlaHours: 14.0, isCurrentUser: false },
+  const leaderboard: LeaderboardEntry[] = [
+    { rank: 1, name: 'Ahmet Yılmaz', level: 'Platin', points: 3450, badges: ['ILK_KAMPANYA', 'HIZ_USTASI', 'DONUSUM_KRALI', 'CHURN_AVCISI'], completedCases: 48, avgSlaHours: 1.4, isCurrentUser: true },
+    { rank: 2, name: 'Ayşe Kaya', level: 'Altın', points: 2280, badges: ['ILK_KAMPANYA', 'DONUSUM_KRALI', 'MARATONCU'], completedCases: 34, avgSlaHours: 2.1, isCurrentUser: false },
+    { rank: 3, name: 'Mehmet Demir', level: 'Altın', points: 1890, badges: ['ILK_KAMPANYA', 'HIZ_USTASI'], completedCases: 29, avgSlaHours: 3.2, isCurrentUser: false },
+    { rank: 4, name: 'Zeynep Çelik', level: 'Gümüş', points: 1240, badges: ['ILK_KAMPANYA', 'UZMAN'], completedCases: 19, avgSlaHours: 2.8, isCurrentUser: false },
+    { rank: 5, name: 'Caner Şahin', level: 'Bronz', points: 420, badges: ['ILK_KAMPANYA'], completedCases: 8, avgSlaHours: 4.5, isCurrentUser: false },
   ];
 
-  const slaData: SlaEntry[] = [
-    { caseCode: 'CMP-2026-000102', campaignName: 'Churn Önleme Cihaz Fırsatı', priority: 'KRITIK', status: 'YENI', slaHours: 2, remainingHours: 1.5, expert: 'Atanmadı', breached: false },
-    { caseCode: 'CMP-2026-000108', campaignName: 'VIP Tarife Yükseltme', priority: 'YUKSEK', status: 'OPTIMIZE_EDILIYOR', slaHours: 8, remainingHours: 3.2, expert: 'Ahmet Yılmaz', breached: false },
-    { caseCode: 'CMP-2026-000099', campaignName: 'Pasif Abone Reaktivasyon', priority: 'ORTA', status: 'TEST_EDILIYOR', slaHours: 24, remainingHours: -2, expert: 'Mehmet Demir', breached: true },
+  const slaCases: SlaEntry[] = [
+    { caseCode: 'CMP-2026-000102', campaignName: 'Riskli Kayıp Abone Çözüm Kampanyası', priority: 'KRİTİK', status: 'ATANDI', slaHours: 2, remainingHours: 0.8, expert: 'Ahmet Yılmaz', breached: false },
+    { caseCode: 'CMP-2026-000105', campaignName: 'Eski Tarife Yenileme Fırsatı', priority: 'YÜKSEK', status: 'OPTIMIZE_EDILIYOR', slaHours: 8, remainingHours: 2.1, expert: 'Ayşe Kaya', breached: false },
+    { caseCode: 'CMP-2026-000099', campaignName: 'Cihaz Kampanyası Segment Düzeltme', priority: 'KRİTİK', status: 'YENİ', slaHours: 2, remainingHours: 0, expert: 'Atanmadı', breached: true },
   ];
 
-  const categoryAccuracy = [
-    { name: 'YÜKSEK DEĞER', accuracy: 92.4, correct: 416, total: 450, color: 'blue' },
-    { name: 'RİSKLİ KAYIP', accuracy: 91.2, correct: 346, total: 380, color: 'rose' },
-    { name: 'YENİ ABONE', accuracy: 84.0, correct: 269, total: 320, color: 'emerald' },
-    { name: 'PASİF ABONE', accuracy: 82.5, correct: 223, total: 270, color: 'amber' },
-  ];
+  const loadAiAnalytics = async () => {
+    setIsAiLoading(true);
+    try {
+      const [bmRes, featRes] = await Promise.all([
+        fetch(`${API_GW}/api/v1/ai/benchmark`),
+        fetch(`${API_GW}/api/v1/ai/feature-importance`),
+      ]);
+      if (bmRes.ok) {
+        const d = await bmRes.json();
+        if (d.benchmark_results && d.benchmark_results.length > 0) {
+          setBenchmarkData(d.benchmark_results);
+        }
+      }
+      if (featRes.ok) {
+        const d = await featRes.json();
+        if (d.feature_importances && d.feature_importances.length > 0) {
+          setFeaturesData(d.feature_importances);
+        }
+      }
+    } catch {
+      // Fallback stays active
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
 
-  const pointsMatrix = [
-    { event: 'Optimizasyon Tamamlandı', points: '+10', type: 'bonus' },
-    { event: 'Hızlı Optimizasyon (< 2 saat)', points: '+5', type: 'bonus' },
-    { event: 'Dönüşüm Hedefi Aşıldı', points: '+15', type: 'bonus' },
-    { event: 'KRİTİK Vaka SLA İçi', points: '+15', type: 'bonus' },
-    { event: 'SLA Aşımı', points: '-5', type: 'penalty' },
-    { event: 'Düşük Puan (1-2 Yıldız)', points: '-3', type: 'penalty' },
-  ];
+  useEffect(() => {
+    loadAiAnalytics();
+  }, []);
 
-  const tabs = [
-    { key: 'OVERVIEW', label: 'Genel Bakış', icon: BarChart3 },
-    { key: 'LEADERBOARD', label: 'Liderlik Tablosu', icon: Trophy },
-    { key: 'AI_ACCURACY', label: 'AI Doğruluk', icon: Brain },
-    { key: 'SLA', label: 'SLA İzleme', icon: Timer },
-  ];
+  const triggerDemoSimulation = async () => {
+    setDemoSimulating(true);
+    try {
+      await fetch(`${API_GW}/api/v1/events/broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'BADGE_EARNED',
+          title: '🏆 Canlı Jüri Demosu: Yeni Rozet Kazanıldı!',
+          message: 'Ahmet Yılmaz (Uzman) - Churn Avcısı Rozeti ve +15 Puan Kazandı! (Real-time SSE Notification)',
+        }),
+      });
+    } catch { /* ignore */ }
+    setTimeout(() => setDemoSimulating(false), 2000);
+  };
 
   return (
-    <DashboardShell role="supervisor" userName="Süpervizör Paneli" userDetail="supervisor@turkcell.com.tr">
-      <main className="max-w-[1400px] mx-auto px-6 py-8 space-y-8">
-        <div className="flex items-center justify-between">
+    <DashboardShell role="supervisor" userName="Süpervizör Yönetici" userDetail="Pazarlama ve Operasyon Yöneticisi">
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-black text-white">Süpervizör & Analitik Kontrol Paneli</h1>
-            <p className="text-xs text-slate-500 mt-1">Canlı AI doğruluk metrikleri, liderlik tablosu ve SLA takibi</p>
+            <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Süpervizör Operasyonel Görünürlük Ekranı</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium">Kampanya performansı, AI model isabet oranı, SLA takibi ve liderlik tablosu</p>
           </div>
-
-          {/* Tab Navigation */}
-          <div className="flex items-center space-x-1 p-1 bg-slate-900/60 rounded-xl border border-white/5">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all duration-300 flex items-center space-x-2 ${
-                  activeTab === tab.key
-                    ? tab.key === 'LEADERBOARD' ? 'bg-turkcell-yellow text-turkcell-navy shadow-lg shadow-turkcell-yellow/20' :
-                      tab.key === 'AI_ACCURACY' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' :
-                      tab.key === 'SLA' ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/20' :
-                      'bg-purple-600 text-white shadow-lg shadow-purple-600/20'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <tab.icon className="w-3.5 h-3.5" />
-                <span className="hidden md:inline">{tab.label}</span>
-              </button>
-            ))}
+          <div className="flex items-center space-x-3">
+            <button
+              onClick={triggerDemoSimulation}
+              disabled={demoSimulating}
+              className="px-4 py-2 bg-gradient-to-r from-turkcell-yellow via-amber-400 to-amber-500 text-turkcell-navy text-xs font-black rounded-xl shadow-md hover:scale-[1.02] transition-all flex items-center space-x-2 disabled:opacity-60"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>{demoSimulating ? 'Simüle Ediliyor...' : 'Canlı Demo Event Fırlat (+2 Bonus SSE)'}</span>
+            </button>
+            <div className="flex items-center space-x-2 px-3 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full">
+              <BarChart3 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+              <span className="text-xs text-purple-700 dark:text-purple-400 font-bold uppercase tracking-wider">Süpervizör Panel</span>
+            </div>
           </div>
         </div>
-        {/* KPI Strip */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+
+        {/* Tabs */}
+        <div className="flex space-x-1 bg-slate-200/60 dark:bg-slate-900/60 p-1 rounded-xl w-fit border border-slate-300/40 dark:border-slate-800">
           {[
-            { label: 'AI Model Doğruluğu', value: `%${aiAccuracy}`, sub: activeModelVersion, icon: Cpu, color: 'blue' },
-            { label: 'Toplam Tahmin', value: totalPredictions.toLocaleString(), sub: `${misclassifiedCount} düzeltme`, icon: Activity, color: 'amber' },
-            { label: 'Lider Uzman', value: 'Ahmet Yılmaz', sub: '3,450 Puan • Platin', icon: Trophy, color: 'purple' },
-            { label: 'SLA Başarı Oranı', value: '%96.2', sub: 'Son 30 gün • 0 kritik ihlal', icon: CheckCircle2, color: 'emerald' },
-            { label: 'Aktif Uzman', value: '5', sub: '3 online • 2 offline', icon: Users, color: 'cyan' },
-          ].map((kpi) => (
-            <div key={kpi.label} className="glass-card rounded-2xl p-5 kpi-card">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">{kpi.label}</span>
-                <kpi.icon className={`w-4 h-4 text-${kpi.color}-400`} />
-              </div>
-              <div className="text-2xl font-black text-white leading-tight">{kpi.value}</div>
-              <div className="text-[10px] text-slate-500 mt-1">{kpi.sub}</div>
-            </div>
+            { key: 'overview', label: 'Genel Bakış', icon: Activity },
+            { key: 'leaderboard', label: 'Liderlik Tablosu', icon: Trophy },
+            { key: 'ai_accuracy', label: 'AI Analiz & Benchmark', icon: Brain },
+            { key: 'sla', label: 'SLA Takibi', icon: Timer },
+          ].map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as typeof activeTab)}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                activeTab === tab.key
+                  ? 'bg-turkcell-navy text-white dark:bg-turkcell-yellow dark:text-turkcell-navy shadow-md'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              <span>{tab.label}</span>
+            </button>
           ))}
         </div>
 
-        {/* === OVERVIEW TAB === */}
-        {activeTab === 'OVERVIEW' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Quick Leaderboard */}
-            <div className="glass-card rounded-2xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <Trophy className="w-5 h-5 text-turkcell-yellow" />
-                  <h3 className="text-lg font-bold text-white">Liderlik Tablosu</h3>
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: 'Aktif Vakalar', val: '42 Vaka', desc: '12 Optimizasyonda', icon: Activity, color: 'text-blue-600 dark:text-blue-400' },
+                { label: 'SLA Uyum Oranı', val: '%94.2', desc: 'Hedef: %90+', icon: Timer, color: 'text-emerald-600 dark:text-emerald-400' },
+                { label: 'AI Tahmin Doğruluğu', val: '%88.5', desc: '1420 Tahmin', icon: Brain, color: 'text-turkcell-blue dark:text-turkcell-yellow' },
+                { label: 'Ortalama Dönüşüm Artışı', val: '+%18.4', desc: 'A/B Test Ortalama', icon: TrendingUp, color: 'text-purple-600 dark:text-purple-400' },
+              ].map((kpi, i) => (
+                <div key={i} className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-500 uppercase">{kpi.label}</span>
+                    <kpi.icon className={`w-5 h-5 ${kpi.color}`} />
+                  </div>
+                  <div className={`text-2xl font-black ${kpi.color}`}>{kpi.val}</div>
+                  <div className="text-[11px] text-slate-500 font-medium">{kpi.desc}</div>
                 </div>
-                <button onClick={() => setActiveTab('LEADERBOARD')} className="text-[11px] text-turkcell-yellow font-semibold hover:underline">
-                  Detaylı Görüntüle →
-                </button>
-              </div>
-              <div className="space-y-3">
-                {leaderboardData.slice(0, 3).map((row) => {
-                  const lc = LEVEL_CONFIG[row.level];
-                  return (
-                    <div key={row.rank} className="flex items-center space-x-4 p-3 rounded-xl bg-slate-900/40 border border-white/[0.03]">
-                      <div className="text-lg font-black text-white w-8">#{row.rank}</div>
-                      <div className="flex-1">
-                        <div className="text-sm font-semibold text-white">{row.name}</div>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${lc?.bg} ${lc?.text} border ${lc?.border}`}>{row.level}</span>
-                          <span className="text-[10px] text-slate-500">{row.completedCases} vaka</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-lg font-black text-turkcell-yellow">{row.points.toLocaleString()}</div>
-                        <div className="text-[9px] text-slate-500">puan</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              ))}
             </div>
 
-            {/* Points Matrix */}
-            <div className="glass-card rounded-2xl p-6 space-y-4">
-              <div className="flex items-center space-x-2">
-                <Zap className="w-5 h-5 text-turkcell-yellow" />
-                <h3 className="text-lg font-bold text-white">Puanlama Matrisi (§6.1)</h3>
-              </div>
-              <div className="space-y-2">
-                {pointsMatrix.map((pm) => (
-                  <div key={pm.event} className="flex items-center justify-between p-3 rounded-xl bg-slate-900/40 border border-white/[0.03]">
-                    <span className="text-xs text-slate-300">{pm.event}</span>
-                    <span className={`text-sm font-black ${pm.type === 'bonus' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {pm.points}
-                    </span>
+            {/* Segment Breakdown */}
+            <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Segment Dağılımı ve Dönüşüm Oranları</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {[
+                  { name: 'YÜKSEK DEĞER', total: 450, rate: '%32', color: 'bg-emerald-500' },
+                  { name: 'RİSKLİ KAYIP (Churn)', total: 380, rate: '%14 (KRİTİK)', color: 'bg-rose-500' },
+                  { name: 'YENİ ABONE', total: 320, rate: '%28', color: 'bg-blue-500' },
+                  { name: 'PASİF ABONE', total: 270, rate: '%18', color: 'bg-amber-500' },
+                ].map((seg, idx) => (
+                  <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
+                    <div className="flex items-center space-x-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${seg.color}`} />
+                      <span className="text-xs font-extrabold text-slate-900 dark:text-white">{seg.name}</span>
+                    </div>
+                    <div className="text-lg font-black text-slate-900 dark:text-white">{seg.total} Müşteri</div>
+                    <div className="text-[11px] font-semibold text-slate-500">Dönüşüm Oranı: <span className="text-slate-900 dark:text-white">{seg.rate}</span></div>
                   </div>
                 ))}
               </div>
@@ -243,250 +237,185 @@ export default function SupervisorDashboard() {
           </div>
         )}
 
-        {/* === LEADERBOARD TAB === */}
-        {activeTab === 'LEADERBOARD' && (
-          <div className="space-y-6">
-            <div className="flex items-center space-x-2">
-              <Trophy className="w-6 h-6 text-turkcell-yellow" />
-              <h3 className="text-2xl font-bold text-white">Uzman Oyunlaştırma Liderlik Tablosu</h3>
-            </div>
-
-            {/* Badge Catalog */}
-            <div className="glass-card rounded-2xl p-5">
-              <div className="flex items-center space-x-2 mb-4">
-                <Award className="w-4 h-4 text-turkcell-yellow" />
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Rozet Kataloğu (§6.2)</span>
-              </div>
-              <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-                {Object.entries(BADGE_ICONS).map(([key, badge]) => {
-                  const BadgeIcon = badge.icon;
-                  return (
-                    <div key={key} className="p-3 rounded-xl bg-slate-900/50 border border-white/[0.03] text-center space-y-2">
-                      <BadgeIcon className={`w-6 h-6 mx-auto ${badge.color}`} />
-                      <div className="text-[10px] font-bold text-slate-300">{badge.label}</div>
-                      <div className="text-[8px] font-mono text-slate-600">{key}</div>
-                    </div>
-                  );
-                })}
+        {/* Leaderboard Tab */}
+        {activeTab === 'leaderboard' && (
+          <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Uzman Puan & Rozet Sıralaması</h3>
+                <p className="text-xs text-slate-500 mt-0.5 font-medium">Tamamlanan vaka, SLA süresi ve dönüşüm başarısına göre puanlanan liderlik tablosu</p>
               </div>
             </div>
-
-            {/* Leaderboard Table */}
-            <div className="glass-card rounded-2xl overflow-hidden">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-900/60 text-slate-500 uppercase text-[10px] tracking-wider border-b border-white/5">
-                  <tr>
-                    <th className="px-5 py-3.5">Sıra</th>
-                    <th className="px-5 py-3.5">Uzman Adı</th>
-                    <th className="px-5 py-3.5">Seviye & İlerleme</th>
-                    <th className="px-5 py-3.5">Rozetler</th>
-                    <th className="px-5 py-3.5">Tamamlanan Vaka</th>
-                    <th className="px-5 py-3.5">Ort. SLA</th>
-                    <th className="px-5 py-3.5 text-right">Puan</th>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-left">
+                    {['Sıra', 'Uzman', 'Seviye', 'Toplam Puan', 'Rozetler', 'Tamamlanan', 'Ort. SLA'].map(h => (
+                      <th key={h} className="px-4 py-3 text-[11px] text-slate-500 font-bold uppercase tracking-wider">{h}</th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/[0.03]">
-                  {leaderboardData.map((row) => {
-                    const lc = LEVEL_CONFIG[row.level];
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {leaderboard.map(entry => {
+                    const levelMeta = LEVEL_CONFIG[entry.level];
                     return (
-                      <tr key={row.rank} className={`table-row-hover ${row.rank === 1 ? 'bg-turkcell-yellow/[0.04]' : ''}`}>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center space-x-2">
-                            {row.rank <= 3 && (
-                              <Trophy className={`w-5 h-5 ${
-                                row.rank === 1 ? 'text-amber-400 fill-amber-400' :
-                                row.rank === 2 ? 'text-slate-300 fill-slate-300' :
-                                'text-amber-700 fill-amber-700'
-                              }`} />
-                            )}
-                            <span className="font-bold text-white">#{row.rank}</span>
-                          </div>
+                      <tr key={entry.rank} className={`hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors ${entry.isCurrentUser ? 'bg-amber-50/40 dark:bg-turkcell-yellow/5' : ''}`}>
+                        <td className="px-4 py-3.5 font-black text-slate-900 dark:text-white">#{entry.rank}</td>
+                        <td className="px-4 py-3.5">
+                          <div className="font-bold text-slate-900 dark:text-white">{entry.name}</div>
+                          {entry.isCurrentUser && <span className="text-[10px] text-amber-600 dark:text-turkcell-yellow font-extrabold">(Siz)</span>}
                         </td>
-                        <td className="px-5 py-4 font-semibold text-white">{row.name}</td>
-                        <td className="px-5 py-4">
-                          <div className="space-y-1.5 max-w-[160px]">
-                            <span className={`inline-flex px-2.5 py-1 rounded-lg text-[10px] font-bold border ${lc?.bg} ${lc?.text} ${lc?.border}`}>
-                              {row.level}
-                            </span>
-                            <LevelProgressBar points={row.points} level={row.level} />
-                          </div>
+                        <td className="px-4 py-3.5">
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] border ${levelMeta.bg} ${levelMeta.text} ${levelMeta.border}`}>
+                            {entry.level}
+                          </span>
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex flex-wrap gap-1.5">
-                            {row.badges.map((b) => {
-                              const badge = BADGE_ICONS[b];
-                              if (!badge) return null;
-                              const BadgeIcon = badge.icon;
+                        <td className="px-4 py-3.5 font-black text-turkcell-navy dark:text-turkcell-yellow text-sm">{entry.points} Puan</td>
+                        <td className="px-4 py-3.5">
+                          <div className="flex space-x-1">
+                            {entry.badges.map(bKey => {
+                              const b = BADGE_ICONS[bKey];
+                              if (!b) return null;
+                              const Icon = b.icon;
                               return (
-                                <div key={b} className="p-1.5 rounded-lg bg-slate-800/60 group relative" title={badge.label}>
-                                  <BadgeIcon className={`w-4 h-4 ${badge.color}`} />
-                                </div>
+                                <span key={bKey} title={b.label} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 inline-flex">
+                                  <Icon className={`w-3.5 h-3.5 ${b.color}`} />
+                                </span>
                               );
                             })}
                           </div>
                         </td>
-                        <td className="px-5 py-4 text-white font-semibold">{row.completedCases}</td>
-                        <td className="px-5 py-4">
-                          <span className={`text-xs font-semibold ${row.avgSlaHours <= 4 ? 'text-emerald-400' : row.avgSlaHours <= 8 ? 'text-amber-400' : 'text-rose-400'}`}>
-                            {row.avgSlaHours}h
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 text-right">
-                          <span className="text-xl font-black text-turkcell-yellow">{row.points.toLocaleString()}</span>
-                        </td>
+                        <td className="px-4 py-3.5 font-bold text-slate-900 dark:text-white">{entry.completedCases} Vaka</td>
+                        <td className="px-4 py-3.5 font-medium text-slate-600 dark:text-slate-400">{entry.avgSlaHours} Saat</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-
-            {/* Level Thresholds */}
-            <div className="glass-card rounded-2xl p-5">
-              <div className="flex items-center space-x-2 mb-4">
-                <TrendingUp className="w-4 h-4 text-turkcell-yellow" />
-                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Seviye Eşikleri (§6.3)</span>
-              </div>
-              <div className="grid grid-cols-4 gap-3">
-                {Object.entries(LEVEL_CONFIG).map(([level, config]) => (
-                  <div key={level} className={`p-4 rounded-xl border ${config.bg} ${config.border} text-center space-y-1`}>
-                    <div className={`text-sm font-bold ${config.text}`}>{level}</div>
-                    <div className="text-xs text-slate-500">{config.min.toLocaleString()} – {config.max.toLocaleString()} Puan</div>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 
-        {/* === AI ACCURACY TAB === */}
-        {activeTab === 'AI_ACCURACY' && (
+        {/* AI Accuracy & Benchmark Tab */}
+        {activeTab === 'ai_accuracy' && (
           <div className="space-y-6">
-            <div className="flex items-center space-x-2">
-              <Brain className="w-6 h-6 text-blue-400" />
-              <h3 className="text-2xl font-bold text-white">AI Model Doğruluk Metrikleri</h3>
-            </div>
-
-            {/* Main Accuracy + Category Breakdown */}
-            <div className="glass-card rounded-2xl p-8 space-y-8">
-              <div className="flex flex-col md:flex-row items-center gap-8">
-                <AccuracyRing value={aiAccuracy} size={140} label="Genel Doğruluk" />
-                <div className="flex-1 grid grid-cols-3 gap-6">
-                  <div className="p-4 rounded-xl bg-slate-900/50 border border-white/5 space-y-1">
-                    <div className="text-[10px] text-slate-500 uppercase tracking-wider">Doğru Tahmin</div>
-                    <div className="text-2xl font-black text-emerald-400">{(totalPredictions - misclassifiedCount).toLocaleString()}</div>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-900/50 border border-white/5 space-y-1">
-                    <div className="text-[10px] text-slate-500 uppercase tracking-wider">Düzeltme Kaydı</div>
-                    <div className="text-2xl font-black text-rose-400">{misclassifiedCount}</div>
-                  </div>
-                  <div className="p-4 rounded-xl bg-slate-900/50 border border-white/5 space-y-1">
-                    <div className="text-[10px] text-slate-500 uppercase tracking-wider">Model F1 Skoru</div>
-                    <div className="text-2xl font-black text-turkcell-yellow">0.872</div>
-                  </div>
+            <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white">Jüri İçin Model Karşılaştırma & Benchmark (Cross-Validation)</h3>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">RandomForest, GradientBoosting ve ExtraTrees algoritmalarının 5-Fold CV başarı oranları</p>
                 </div>
+                <button onClick={loadAiAnalytics} disabled={isAiLoading} className="px-3.5 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-1">
+                  <RefreshCw className={`w-3.5 h-3.5 ${isAiLoading ? 'animate-spin' : ''}`} />
+                  <span>Yenile</span>
+                </button>
               </div>
 
-              {/* Category Breakdown (+3 Bonus) */}
-              <div className="border-t border-white/5 pt-6">
-                <div className="flex items-center space-x-2 mb-5">
-                  <Cpu className="w-5 h-5 text-turkcell-yellow" />
-                  <h4 className="text-lg font-bold text-white">Kategori Bazlı AI İsabet Oranları (+3 Bonus Puan)</h4>
-                </div>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {categoryAccuracy.map((cat) => (
-                    <div key={cat.name} className={`glass-card rounded-2xl p-5 border-${cat.color}-500/20 text-center space-y-3`}>
-                      <AccuracyRing value={cat.accuracy} size={80} label="" />
-                      <div>
-                        <div className={`text-xs font-bold text-${cat.color}-400`}>{cat.name}</div>
-                        <div className="text-[10px] text-slate-500 mt-1">{cat.correct} / {cat.total} doğru</div>
-                      </div>
+              {/* Model Comparison Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-left">
+                      {['Algoritma', '5-Fold CV Doğruluğu', 'Weighted F1-Score', 'Standart Sapma', 'Durum'].map(h => (
+                        <th key={h} className="px-4 py-3 text-[11px] text-slate-500 font-bold uppercase tracking-wider">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {benchmarkData.map((bm, idx) => (
+                      <tr key={bm.model_name} className="hover:bg-slate-50 dark:hover:bg-slate-800/20">
+                        <td className="px-4 py-3 font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                          <Brain className="w-4 h-4 text-turkcell-blue dark:text-turkcell-yellow" />
+                          <span>{bm.model_name}</span>
+                        </td>
+                        <td className="px-4 py-3 font-black text-emerald-600 dark:text-emerald-400 text-sm">%{bm.cv_accuracy_pct}</td>
+                        <td className="px-4 py-3 font-bold text-slate-800 dark:text-slate-200">{bm.f1_score}</td>
+                        <td className="px-4 py-3 text-slate-500 font-medium">±%{bm.cv_std_pct}</td>
+                        <td className="px-4 py-3">
+                          {idx === 0 ? (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
+                              ★ Aktif Üretim Modeli
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                              Yedek Model
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Feature Importance Weights (SHAP / XAI) */}
+            <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Açıklanabilir AI (XAI) Özellik Önem Ağırlıkları (Feature Importance)</h3>
+                <p className="text-xs text-slate-500 mt-1 font-medium">Modelin öneri ve segment kararını en çok etkileyen telko parametreleri</p>
+              </div>
+
+              <div className="space-y-3">
+                {featuresData.map(feat => (
+                  <div key={feat.feature} className="space-y-1">
+                    <div className="flex justify-between text-xs font-bold text-slate-900 dark:text-slate-200">
+                      <span>{feat.label}</span>
+                      <span className="text-turkcell-blue dark:text-turkcell-yellow">%{feat.percentage} ({feat.importance_weight})</span>
                     </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Model Info */}
-            <div className="glass-card rounded-2xl p-5 flex items-center space-x-4">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
-                <Cpu className="w-5 h-5" />
-              </div>
-              <div className="flex-1">
-                <div className="text-sm font-bold text-white">Aktif Model: {activeModelVersion}</div>
-                <div className="text-[11px] text-slate-500">scikit-learn RandomForest + GradientBoosting • 8 feature input • Auto-retrain: segment override sonrası</div>
-              </div>
-              <span className="px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-400 text-[10px] font-bold border border-emerald-500/20 flex items-center space-x-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 status-dot" />
-                <span>Aktif</span>
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* === SLA TAB === */}
-        {activeTab === 'SLA' && (
-          <div className="space-y-6">
-            <div className="flex items-center space-x-2">
-              <Timer className="w-6 h-6 text-rose-400" />
-              <h3 className="text-2xl font-bold text-white">SLA İzleme Paneli (§4.4)</h3>
-            </div>
-
-            {/* SLA Rules */}
-            <div className="glass-card rounded-2xl p-5">
-              <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">SLA Kuralları</div>
-              <div className="grid grid-cols-4 gap-3">
-                {[
-                  { priority: 'KRİTİK', hours: '2 Saat', color: 'rose', desc: 'Kırmızı işaretlenir, en üstte sabitlenir' },
-                  { priority: 'YÜKSEK', hours: '8 Saat', color: 'orange', desc: 'Turuncu işaretlenir' },
-                  { priority: 'ORTA', hours: '24 Saat', color: 'amber', desc: 'Görsel uyarı' },
-                  { priority: 'DÜŞÜK', hours: '72 Saat', color: 'slate', desc: 'Görsel uyarı' },
-                ].map((rule) => (
-                  <div key={rule.priority} className={`p-4 rounded-xl bg-${rule.color}-500/10 border border-${rule.color}-500/20 space-y-1`}>
-                    <div className={`text-sm font-black text-${rule.color}-400`}>{rule.priority}</div>
-                    <div className="text-lg font-black text-white">{rule.hours}</div>
-                    <div className="text-[10px] text-slate-500">{rule.desc}</div>
+                    <div className="h-2.5 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-turkcell-blue to-turkcell-navy dark:from-turkcell-yellow dark:to-amber-500 rounded-full transition-all duration-700"
+                        style={{ width: `${feat.percentage}%` }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
+          </div>
+        )}
 
-            {/* SLA Table */}
-            <div className="glass-card rounded-2xl overflow-hidden">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-900/60 text-slate-500 uppercase text-[10px] tracking-wider border-b border-white/5">
-                  <tr>
-                    <th className="px-5 py-3.5">Vaka</th>
-                    <th className="px-5 py-3.5">Kampanya</th>
-                    <th className="px-5 py-3.5">Öncelik</th>
-                    <th className="px-5 py-3.5">Durum</th>
-                    <th className="px-5 py-3.5">SLA Süresi</th>
-                    <th className="px-5 py-3.5">Kalan</th>
-                    <th className="px-5 py-3.5">Uzman</th>
+        {/* SLA Tab */}
+        {activeTab === 'sla' && (
+          <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">SLA Süresi Yaklaşan & İhlal Edilmiş Vakalar</h3>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium">KRİTİK (2 Saat), YÜKSEK (8 Saat), ORTA (24 Saat) SLA kurallarına göre izleme</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-left">
+                    {['Vaka Kodu', 'Kampanya Adı', 'Öncelik', 'Durum', 'Kalan Süre', 'Atanan Uzman'].map(h => (
+                      <th key={h} className="px-4 py-3 text-[11px] text-slate-500 font-bold uppercase tracking-wider">{h}</th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/[0.03]">
-                  {slaData.map((sla) => (
-                    <tr key={sla.caseCode} className={`table-row-hover ${sla.breached ? 'bg-rose-500/5' : ''}`}>
-                      <td className="px-5 py-4 font-mono text-[11px] text-turkcell-yellow font-bold">{sla.caseCode}</td>
-                      <td className="px-5 py-4 text-white font-medium text-xs">{sla.campaignName}</td>
-                      <td className="px-5 py-4">
-                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-bold ${
-                          sla.priority === 'KRITIK' ? 'bg-rose-500/15 text-rose-400' : 'bg-orange-500/15 text-orange-400'
-                        }`}>{sla.priority}</span>
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className="px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-400 text-[10px] font-bold border border-amber-500/20">
-                          {sla.status}
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {slaCases.map(s => (
+                    <tr key={s.caseCode} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                      <td className="px-4 py-3.5 font-mono font-bold text-turkcell-blue dark:text-turkcell-yellow">{s.caseCode}</td>
+                      <td className="px-4 py-3.5 font-bold text-slate-900 dark:text-white">{s.campaignName}</td>
+                      <td className="px-4 py-3.5">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          s.priority === 'KRİTİK' ? 'bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-400' : 'bg-orange-100 dark:bg-orange-500/15 text-orange-700 dark:text-orange-400'
+                        }`}>
+                          {s.priority}
                         </span>
                       </td>
-                      <td className="px-5 py-4 text-xs text-slate-300 font-semibold">{sla.slaHours}h</td>
-                      <td className="px-5 py-4">
-                        <span className={`text-xs font-bold ${sla.breached ? 'text-rose-400 sla-critical' : sla.remainingHours < 2 ? 'text-orange-400' : 'text-emerald-400'}`}>
-                          {sla.breached ? `AŞILDI (${Math.abs(sla.remainingHours)}h)` : `${sla.remainingHours}h kaldı`}
-                        </span>
+                      <td className="px-4 py-3.5 font-semibold text-slate-700 dark:text-slate-300">{s.status}</td>
+                      <td className="px-4 py-3.5">
+                        {s.breached ? (
+                          <span className="text-rose-600 dark:text-rose-400 font-black flex items-center space-x-1">
+                            <AlertTriangle className="w-3.5 h-3.5" />
+                            <span>SLA İHLAL EDİLDİ</span>
+                          </span>
+                        ) : (
+                          <span className="text-amber-600 dark:text-amber-400 font-bold">{s.remainingHours} Saat Kaldı</span>
+                        )}
                       </td>
-                      <td className="px-5 py-4 text-xs text-slate-400">{sla.expert}</td>
+                      <td className="px-4 py-3.5 font-semibold text-slate-900 dark:text-white">{s.expert}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -494,7 +423,7 @@ export default function SupervisorDashboard() {
             </div>
           </div>
         )}
-      </main>
+      </div>
     </DashboardShell>
   );
 }

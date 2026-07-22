@@ -1,99 +1,129 @@
-# CampaignCell — Event Catalog (RabbitMQ)
+# CampaignCell — Olay Tabanlı Mimari Dokümanı (EVENTS.md)
 
-Exchange: `campaigncell.events` (type: `topic`)
-Routing key convention: `<domain>.<action>` (örn. `campaign.optimized`)
-Her queue **durable**, her mesaj **persistent** olmalıdır (servis kapansa da mesaj kaybolmamalı).
+CampaignCell mikroservis ekosistemi, servisler arası gevşek bağlılığı (loose coupling) ve yüksek ölçeklenebilirliği sağlamak amacıyla asenkron event-driven mimari (RabbitMQ) kullanır.
 
-## Ortak Event Zarfı (Envelope)
+## 📡 Event Exchange ve Queue Mimarisi
 
-```json
-{
-  "event_type": "campaign.optimized",
-  "event_id": "uuid-v4",
-  "timestamp": "2026-07-18T14:22:10Z",
-  "source": "campaign-service",
-  "version": "1.0",
-  "payload": { }
-}
-```
-
-`event_id` idempotency-key olarak tüketici tarafında kullanılır (aynı event iki kez işlenmez).
+- **Exchange Name**: `campaign_events` (Topic Exchange)
+- **Queues**:
+  - `q.campaign.ai-events`: Campaign Service dinler
+  - `q.ai.campaign-events`: AI Service dinler
+  - `q.gamification.campaign-events`: Gamification Service dinler
 
 ---
 
-## Campaign Domain (Publisher: campaign-service)
+## 📋 Tanımlı Event Listesi & Payload Yapıları
 
-| Event | Ne Zaman | Consumer(s) |
-|---|---|---|
-| `campaign.created` | Kampanya oluşturulduğunda | ai-service (analiz tetikler) |
-| `campaign.optimization.required` | Düşük dönüşüm tespit edildiğinde optimizasyon vakası açılır | ai-service (uzman ataması için) |
-| `campaign.assigned` | Vaka bir uzmana atandığında (AI veya manuel) | gamification-service (yük takibi), identity-service (bildirim) |
-| `campaign.optimized` | Vaka TAMAMLANDI durumuna geçtiğinde | gamification-service (puan/rozet) |
-| `campaign.published` | Vaka YAYINDA durumuna geçtiğinde | — (analytics) |
-| `campaign.archived` | Geçerlilik süresi dolduğunda | — (analytics) |
-| `segment.changed` | Uzman/süpervizör AI segmentini değiştirdiğinde | ai-service (doğruluk metriği — `is_ai_misclassified=true`) |
+### 1. `campaign.created`
+- **Yayınlayan**: Campaign Service
+- **Dinleyen**: AI Service
+- **Açıklama**: Yeni bir kampanya oluşturulduğunda tetiklenir. AI servisi aboneye özel öneri skorlamasını başlatır.
 
-### Örnek: `campaign.optimized`
 ```json
 {
-  "event_type": "campaign.optimized",
-  "event_id": "5e2f...",
-  "timestamp": "2026-07-18T14:22:10Z",
-  "source": "campaign-service",
-  "version": "1.0",
+  "event_type": "campaign.created",
+  "timestamp": "2026-07-22T20:00:00Z",
   "payload": {
-    "case_id": "CMP-2026-000123",
-    "expert_id": "a7f3-...",
-    "segment": "RISKLI_KAYIP",
-    "priority": "YUKSEK",
-    "conversion_lift": 0.18,
-    "created_at": "2026-07-18T13:40:02Z",
-    "completed_at": "2026-07-18T14:22:10Z",
-    "sla_met": true
+    "campaign_id": "c1a23456-0000-0000-0000-000000000001",
+    "campaign_code": "CMP-2026-000101",
+    "name": "Yüksek Değerli Abone 20GB Ek Paket",
+    "type": "EK_PAKET",
+    "target_segment": "YUKSEK_DEGER",
+    "discount_percent": 30
   }
 }
 ```
 
-## Subscriber Domain (Publisher: campaign-service)
+---
 
-| Event | Ne Zaman | Consumer(s) |
-|---|---|---|
-| `subscriber.offer.accepted` | Abone teklifi kabul ettiğinde | ai-service (conversion label güncelleme) |
-| `subscriber.offer.rejected` | Abone reddettiğinde | ai-service (benzer kampanya skorunu düşürme) |
-| `subscriber.feedback.submitted` | 1-5 yıldız verildiğinde | gamification-service (düşük puan cezası, örn. -3) |
+### 2. `ai.prediction.created`
+- **Yayınlayan**: AI Service
+- **Dinleyen**: Campaign Service
+- **Açıklama**: AI servisi bir vaka için tahmin ürettiğinde fırlatır.
 
-## SLA Domain (Publisher: campaign-service, zamanlayıcı job ile)
-
-| Event | Ne Zaman | Consumer(s) |
-|---|---|---|
-| `sla.warning` | SLA süresinin %80'i dolduğunda | frontend (bildirim), supervisor dashboard |
-| `sla.breached` | SLA süresi aşıldığında | gamification-service (-5 puan), supervisor dashboard |
-
-## Gamification Domain (Publisher: gamification-service)
-
-| Event | Ne Zaman | Consumer(s) |
-|---|---|---|
-| `badge.earned` | Rozet koşulu sağlandığında | frontend (toast/modal bildirim) |
-| `points.awarded` | Her puan işleminde | frontend (leaderboard canlı güncelleme) |
-
-## AI Domain (Publisher: ai-service)
-
-| Event | Ne Zaman | Consumer(s) |
-|---|---|---|
-| `ai.prediction.created` | Yeni skor/segment/probability üretildiğinde | campaign-service (kampanyaya işlenir) |
-| `ai.prediction.corrected` | Uzman override sonrası doğruluk kaydı güncellendiğinde | — (analytics/accuracy hesaplama) |
-| `ai.service.recovered` | AI Service healthcheck yeniden yeşile döndüğünde (self-published on startup) | campaign-service (BELIRSIZ kuyruğunu yeniden işler) |
+```json
+{
+  "event_type": "ai.prediction.created",
+  "timestamp": "2026-07-22T20:00:01Z",
+  "payload": {
+    "prediction_id": "p9876543-0000-0000-0000-000000000001",
+    "subscriber_id": "sub-1001",
+    "campaign_id": "c1a23456-0000-0000-0000-000000000001",
+    "recommendation_score": 0.885,
+    "conversion_probability": 0.820,
+    "predicted_segment": "YUKSEK_DEGER",
+    "predicted_priority": "YUKSEK",
+    "recommended_expert_id": "a7f30000-0000-0000-0000-000000000001"
+  }
+}
+```
 
 ---
 
-## Queue Tasarımı (öneri)
+### 3. `segment.changed` (AI Feedback Loop)
+- **Yayınlayan**: Campaign Service
+- **Dinleyen**: AI Service
+- **Açıklama**: Uzman veya Süpervizör AI'ın atadığı segmenti override ettiğinde tetiklenir. AI servisi bunu 'yanlış sınıflandırma' olarak kaydeder.
 
-| Queue | Bind Routing Key(s) | Consumer |
-|---|---|---|
-| `q.gamification.campaign-events` | `campaign.optimized`, `campaign.assigned`, `sla.breached`, `subscriber.feedback.submitted` | gamification-service |
-| `q.ai.campaign-events` | `campaign.created`, `campaign.optimization.required`, `segment.changed`, `subscriber.offer.*` | ai-service |
-| `q.campaign.ai-events` | `ai.prediction.created`, `ai.service.recovered` | campaign-service |
-| `q.notifications.all` | `#` (tüm event'ler) | frontend notification gateway (WebSocket/SSE — bonus) |
+```json
+{
+  "event_type": "segment.changed",
+  "timestamp": "2026-07-22T20:05:00Z",
+  "payload": {
+    "case_id": "case-001",
+    "original_segment": "YENI_ABONE",
+    "corrected_segment": "RISKLI_KAYIP",
+    "corrected_by": "supervisor@turkcell.com.tr"
+  }
+}
+```
 
-Dead-letter exchange: `campaigncell.events.dlx` — 3 başarısız işleme denemesinden sonra mesaj
-DLQ'ya düşer ve manuel/otomatik retry job'u ile tekrar denenir.
+---
+
+### 4. `campaign.optimized`
+- **Yayınlayan**: Campaign Service
+- **Dinleyen**: Gamification Service
+- **Açıklama**: Uzman optimizasyon vakasını `TAMAMLANDI` durumuna getirdiğinde fırlatılır. Puan ve rozet motoru tetiklenir.
+
+```json
+{
+  "event_type": "campaign.optimized",
+  "timestamp": "2026-07-22T20:10:00Z",
+  "payload": {
+    "case_id": "case-001",
+    "expert_id": "a7f30000-0000-0000-0000-000000000001",
+    "priority": "KRITIK",
+    "duration_minutes": 45,
+    "target_exceeded": true,
+    "sla_breached": false
+  }
+}
+```
+
+---
+
+### 5. `sla.warning` & `sla.breached`
+- **Yayınlayan**: Campaign Service (Cron görevi)
+- **Dinleyen**: Gamification Service, AI Service
+- **Açıklama**: SLA dolumuna %20 kaldığında veya dolduğunda fırlatılır.
+
+```json
+{
+  "event_type": "sla.breached",
+  "timestamp": "2026-07-22T20:15:00Z",
+  "payload": {
+    "case_id": "case-002",
+    "case_code": "CMP-2026-000102",
+    "assigned_expert_id": "a7f30000-0000-0000-0000-000000000001",
+    "priority": "KRITIK",
+    "sla_deadline": "2026-07-22T20:00:00Z"
+  }
+}
+```
+
+---
+
+### 6. `subscriber.offer.accepted` & `subscriber.offer.rejected`
+- **Yayınlayan**: Campaign Service
+- **Dinleyen**: AI Service, Gamification Service
+- **Açıklama**: Abone teklifi kabul/ret ettiğinde fırlatılır. AI abonenin geçmiş kabul sayısını günceller.
