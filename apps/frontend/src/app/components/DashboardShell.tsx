@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import {
   Home, User, Gift, History, LogOut, ChevronLeft, ChevronRight,
   Cpu, Layers, Trophy, BarChart3, Archive, Settings, Bell,
@@ -89,6 +89,8 @@ const ROLE_CONFIG = {
 
 export default function DashboardShell({ children, role, userName, userDetail = 'Platform' }: DashboardShellProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const currentTab = searchParams.get('tab');
   const config = ROLE_CONFIG[role];
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -210,7 +212,13 @@ export default function DashboardShell({ children, role, userName, userDetail = 
         {/* Nav Links */}
         <nav className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
           {config.links.map((link) => {
-            const isActive = pathname === link.href;
+            const linkBase = link.href.split('?')[0];
+            const linkTab = new URLSearchParams(link.href.split('?')[1] || '').get('tab');
+            
+            // It is active if the base path matches AND (the tabs match OR it's the overview tab and no tab is selected)
+            const isActive = pathname === linkBase && 
+              (linkTab === currentTab || (!currentTab && linkTab === 'overview') || (!linkTab && !currentTab));
+
             const Icon = link.icon;
             return (
               <Link
