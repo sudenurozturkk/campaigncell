@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import Link from 'next/link';
+import DashboardShell from '../../components/DashboardShell';
 import {
-  BarChart3, Cpu, Award, ArrowLeft, Trophy, Activity,
+  BarChart3, Cpu, Award, Trophy, Activity,
   CheckCircle2, Star, TrendingUp, AlertTriangle, Timer,
   Zap, Target, Shield, Medal, Flame, Users, Brain
 } from 'lucide-react';
@@ -137,21 +137,12 @@ export default function SupervisorDashboard() {
   ];
 
   return (
-    <div className="min-h-screen hero-gradient text-slate-100">
-      {/* Header */}
-      <header className="border-b border-white/5 bg-[#050810]/80 backdrop-blur-xl sticky top-0 z-40">
-        <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Link href="/" className="p-2 rounded-xl bg-slate-800/60 hover:bg-slate-700/60 text-slate-400 hover:text-white transition-all">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-turkcell-yellow to-turkcell-blue flex items-center justify-center font-bold text-turkcell-navy text-xs">CC</div>
-              <span className="font-bold text-white">CampaignCell</span>
-              <span className="px-2.5 py-1 rounded-lg bg-purple-500/15 text-purple-400 text-[10px] font-bold border border-purple-500/20">
-                Süpervizör & Analitik
-              </span>
-            </div>
+    <DashboardShell role="supervisor" userName="Süpervizör Paneli" userDetail="supervisor@turkcell.com.tr">
+      <main className="max-w-[1400px] mx-auto px-6 py-8 space-y-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-black text-white">Süpervizör & Analitik Kontrol Paneli</h1>
+            <p className="text-xs text-slate-500 mt-1">Canlı AI doğruluk metrikleri, liderlik tablosu ve SLA takibi</p>
           </div>
 
           {/* Tab Navigation */}
@@ -175,9 +166,6 @@ export default function SupervisorDashboard() {
             ))}
           </div>
         </div>
-      </header>
-
-      <main className="max-w-[1400px] mx-auto px-6 py-8 space-y-8">
         {/* KPI Strip */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {[
@@ -507,6 +495,6 @@ export default function SupervisorDashboard() {
           </div>
         )}
       </main>
-    </div>
+    </DashboardShell>
   );
 }

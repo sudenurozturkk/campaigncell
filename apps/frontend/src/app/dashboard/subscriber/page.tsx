@@ -2,10 +2,11 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import DashboardShell from '../../components/DashboardShell';
 import {
-  Sparkles, CheckCircle2, XCircle, Star, ArrowLeft,
-  Gift, TrendingUp, Zap, ShieldCheck, Package, Smartphone,
-  Heart, ChevronRight, Info
+  Sparkles, CheckCircle2, XCircle, Star,
+  Gift, TrendingUp, Zap, Package, Smartphone,
+  Heart, Info
 } from 'lucide-react';
 
 interface Offer {
@@ -128,32 +129,7 @@ export default function SubscriberDashboard() {
   };
 
   return (
-    <div className="min-h-screen hero-gradient text-slate-100">
-      {/* Header */}
-      <header className="border-b border-white/5 bg-[#050810]/80 backdrop-blur-xl sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Link href="/" className="p-2 rounded-xl bg-slate-800/60 hover:bg-slate-700/60 text-slate-400 hover:text-white transition-all">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-turkcell-yellow to-turkcell-blue flex items-center justify-center font-bold text-turkcell-navy text-xs">CC</div>
-              <span className="font-bold text-white">CampaignCell</span>
-              <span className="px-2.5 py-1 rounded-lg bg-blue-500/15 text-blue-400 text-[10px] font-bold border border-blue-500/20">
-                Abone Portalı
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="text-right">
-              <div className="text-xs font-semibold text-white">Ahmet Yılmaz</div>
-              <div className="text-[10px] text-slate-500">0555 111 22 33 • YÜKSEK DEĞER</div>
-            </div>
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 text-xs font-bold">AY</div>
-          </div>
-        </div>
-      </header>
-
+    <DashboardShell role="subscriber" userName="Ahmet Yılmaz" userDetail="0555 111 22 33 • Yüksek Değer">
       <main className="max-w-6xl mx-auto px-6 py-10 space-y-8">
         {/* Banner */}
         <div className="glass-card rounded-3xl p-10 relative overflow-hidden">
@@ -359,6 +335,6 @@ export default function SubscriberDashboard() {
           </div>
         </div>
       )}
-    </div>
+    </DashboardShell>
   );
 }

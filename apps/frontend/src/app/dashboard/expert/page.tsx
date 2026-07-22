@@ -1,11 +1,10 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import Link from 'next/link';
+import DashboardShell from '../../components/DashboardShell';
 import {
-  Plus, ArrowLeft, AlertTriangle, CheckCircle2, Clock,
-  Layers, Edit3, ChevronRight, Zap, Shield, Target,
-  ArrowRightCircle, XCircle, Timer, RefreshCw, Eye
+  Plus, AlertTriangle, CheckCircle2, Clock,
+  Layers, ChevronRight, XCircle, Timer, RefreshCw, Eye
 } from 'lucide-react';
 
 interface CaseItem {
@@ -193,21 +192,13 @@ export default function ExpertDashboard() {
   }), [cases]);
 
   return (
-    <div className="min-h-screen hero-gradient text-slate-100">
-      {/* Header */}
-      <header className="border-b border-white/5 bg-[#050810]/80 backdrop-blur-xl sticky top-0 z-40">
-        <div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Link href="/" className="p-2 rounded-xl bg-slate-800/60 hover:bg-slate-700/60 text-slate-400 hover:text-white transition-all">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-turkcell-yellow to-turkcell-blue flex items-center justify-center font-bold text-turkcell-navy text-xs">CC</div>
-              <span className="font-bold text-white">CampaignCell</span>
-              <span className="px-2.5 py-1 rounded-lg bg-turkcell-yellow/15 text-turkcell-yellow text-[10px] font-black border border-turkcell-yellow/20">
-                Kampanya Uzmanı
-              </span>
-            </div>
+    <DashboardShell role="expert" userName="Ahmet Yılmaz" userDetail="uzman@turkcell.com.tr • Altın Seviye">
+      <main className="max-w-[1400px] mx-auto px-6 py-8 space-y-8">
+        {/* Page Header Row */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-black text-white">Optimizasyon Vakaları</h1>
+            <p className="text-xs text-slate-500 mt-1">SLA aşımı olan vakalar en üstte sabitlenir</p>
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
@@ -217,9 +208,7 @@ export default function ExpertDashboard() {
             <span>Yeni Kampanya Oluştur</span>
           </button>
         </div>
-      </header>
 
-      <main className="max-w-[1400px] mx-auto px-6 py-8 space-y-8">
         {/* KPI Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
@@ -360,9 +349,7 @@ export default function ExpertDashboard() {
         </div>
       </main>
 
-      {/* ===== MODALS ===== */}
-
-      {/* Create Campaign Modal */}
+      {/* Modals */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-modal rounded-3xl max-w-lg w-full p-8 space-y-6">
@@ -422,7 +409,6 @@ export default function ExpertDashboard() {
         </div>
       )}
 
-      {/* Segment Override Modal */}
       {showSegmentModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-modal rounded-3xl max-w-md w-full p-8 space-y-6">
@@ -466,7 +452,6 @@ export default function ExpertDashboard() {
         </div>
       )}
 
-      {/* Status Transition Modal */}
       {showStatusModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-modal rounded-3xl max-w-md w-full p-8 space-y-6">
@@ -485,7 +470,6 @@ export default function ExpertDashboard() {
               </div>
             )}
 
-            {/* State Flow Visual */}
             <div className="flex items-center space-x-1 overflow-x-auto pb-2">
               {STATE_FLOW.map((state, i) => {
                 const isCurrent = state === showStatusModal.status;
@@ -526,7 +510,6 @@ export default function ExpertDashboard() {
         </div>
       )}
 
-      {/* Detail Modal */}
       {showDetailModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="glass-modal rounded-3xl max-w-lg w-full p-8 space-y-5">
@@ -570,6 +553,6 @@ export default function ExpertDashboard() {
           </div>
         </div>
       )}
-    </div>
+    </DashboardShell>
   );
 }
