@@ -6,18 +6,24 @@ const PUBLIC_PATHS = [
   '/api/v1/health',
   '/api/v1/auth/login',
   '/api/v1/auth/register',
+  '/api/v1/auth/send-otp',
+  '/api/v1/auth/verify-otp',
   '/api/v1/auth/refresh',
   '/api/v1/ai/health',
+  '/api/v1/ai/benchmark',
+  '/api/v1/ai/feature-importance',
 ];
 
-const isPublicPath = (path) => {
-  if (PUBLIC_PATHS.includes(path)) return true;
-  if (path.startsWith('/api/docs') || path.startsWith('/docs')) return true;
+const isPublicPath = (req) => {
+  const p = req.originalUrl || req.path || '';
+  if (p.includes('/auth/')) return true;
+  if (p.includes('/ai/benchmark') || p.includes('/ai/feature-importance') || p.includes('/ai/health')) return true;
+  if (p.startsWith('/api/docs') || p.startsWith('/docs') || p === '/' || p.includes('/health')) return true;
   return false;
 };
 
 const authMiddleware = (req, res, next) => {
-  if (isPublicPath(req.path)) {
+  if (isPublicPath(req)) {
     return next();
   }
 

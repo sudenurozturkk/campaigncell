@@ -8,6 +8,7 @@ const AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8000';
 const GAMIFICATION_SERVICE_URL = process.env.GAMIFICATION_SERVICE_URL || 'http://localhost:3003';
 
 const proxyOptions = (targetUrl) => ({
+  parseReqBody: false,
   proxyReqOptDecorator: (proxyReqOpts, srcReq) => {
     if (srcReq.correlationId) {
       proxyReqOpts.headers['x-correlation-id'] = srcReq.correlationId;
@@ -22,18 +23,25 @@ const proxyOptions = (targetUrl) => ({
   },
   proxyErrorHandler: (err, res, next) => {
     console.error(`Proxy Hatası [${targetUrl}]:`, err.message);
-    res.status(503).json({
-      statusCode: 503,
-      message: 'Hedef mikroservis şu anda erişilebilir değil (Service Unavailable)',
-      error: 'Service Unavailable',
-    });
+    if (!res.headersSent) {
+      res.status(503).json({
+        statusCode: 503,
+        message: 'Hedef mikroservis şu anda erişilebilir değil (Service Unavailable)',
+        error: 'Service Unavailable',
+      });
+    } else {
+      next(err);
+    }
   },
 });
 
 // 1. Identity Service Proxies
 router.use('/api/v1/auth', proxy(IDENTITY_SERVICE_URL, {
   ...proxyOptions(IDENTITY_SERVICE_URL),
-  proxyReqPathResolver: (req) => `/auth${req.url}`,
+  proxyReqPathResolver: (req) => {
+    const subPath = req.originalUrl.replace('/api/v1/auth', '');
+    return `/auth${subPath}`;
+  },
 }));
 
 router.use('/api/v1/users', proxy(IDENTITY_SERVICE_URL, {

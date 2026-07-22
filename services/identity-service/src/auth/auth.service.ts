@@ -84,6 +84,22 @@ export class AuthService {
       passwordHash = await bcrypt.hash(data.password, salt);
     }
     
+    // Check if user already exists with email or GSM
+    let existingUser = null;
+    if (data.email) existingUser = await this.usersService.findByEmailOrGsm(data.email);
+    if (!existingUser && data.gsmNumber) existingUser = await this.usersService.findByEmailOrGsm(data.gsmNumber);
+
+    if (existingUser) {
+      // Update existing record with password and details
+      const updatedUser = await this.usersService.update(existingUser.id, {
+        firstName: data.firstName || existingUser.firstName,
+        lastName: data.lastName || existingUser.lastName,
+        region: data.region || existingUser.region,
+        passwordHash: passwordHash || existingUser.passwordHash,
+      });
+      return this.login(updatedUser);
+    }
+
     const user = await this.usersService.create({
       role: 'SUBSCRIBER',
       email: data.email,

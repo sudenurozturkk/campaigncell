@@ -26,6 +26,10 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
+  async update(id: string, data: any) {
+    return this.prisma.user.update({ where: { id }, data });
+  }
+
   // ===== ADMIN METHODS =====
 
   async findAll(role?: RoleEnum) {
