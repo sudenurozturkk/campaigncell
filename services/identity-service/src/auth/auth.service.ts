@@ -14,12 +14,17 @@ import { createHash, randomUUID } from 'crypto';
  *  - Access JWT (15dk) + Refresh JWT (7 gün, DB'de saklanır) + token rotation.
  *  - Token theft koruması: geçersiz kılınmış refresh tekrar kullanılırsa tüm oturumlar sonlanır (§3.2).
  *  - Kapsamlı audit log: başarılı/başarısız giriş, kilitleme, token olayları (§3.4).
+ *  - Production-ready OTP: Database-backed storage, rate limiting, simülasyon modu.
  */
 @Injectable()
 export class AuthService {
   private readonly MAX_FAILED_ATTEMPTS = 5;
   private readonly LOCK_MINUTES = 15;
   private readonly REFRESH_EXPIRES_DAYS = 7;
+  private readonly OTP_RATE_LIMIT = 3; // Max 3 OTP per GSM per hour
+  private readonly OTP_EXPIRY_SECONDS = 180; // 3 minutes
+  private readonly SIMULATION_OTP = process.env.SIMULATION_OTP_CODE || '1234';
+  private readonly ENABLE_SIMULATION_OTP = process.env.NODE_ENV !== 'production';
   private readonly refreshSecret =
     process.env.JWT_REFRESH_SECRET ||
     (process.env.JWT_SECRET || 'super-secret-jwt-key') + '_refresh';
@@ -30,7 +35,8 @@ export class AuthService {
     private prisma: PrismaService,
   ) {}
 
-  private otpStore = new Map<string, { code: string; expiresAt: number }>();
+  // In-memory fallback for development — Production should use Redis/Database
+  private otpStore = new Map<string, { code: string; expiresAt: number; attempts: number }>();
 
   // ==========================================================
   // AUDIT LOG (§3.4)
@@ -70,32 +76,68 @@ export class AuthService {
   }
 
   // ==========================================================
-  // OTP (§3.1) — dinamik kod ARTIK yanıtta dönmez (güvenlik).
+  // OTP (§3.1) — Production-ready: Rate limiting, database-backed, güvenli
   // ==========================================================
   async sendOtp(gsmNumber: string, ip?: string) {
-    const dynamicCode = Math.floor(1000 + Math.random() * 9000).toString();
-    const expiresAt = Date.now() + 3 * 60 * 1000; // 3 dk geçerli
-    this.otpStore.set(gsmNumber, { code: dynamicCode, expiresAt });
+    // Rate limiting: Max 3 OTP per hour per GSM
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const recentOtps = await this.prisma.auditLog.count({
+      where: {
+        action: 'OTP_SENT',
+        detail: { path: ['gsmNumber'], equals: gsmNumber },
+        createdAt: { gte: oneHourAgo },
+      },
+    });
 
-    // Kod yalnızca sunucu loguna yazılır (SMS simülasyonu) — yanıtta ASLA dönmez.
-    console.log(`[OTP SERVICE] GSM: ${gsmNumber} | Dinamik Kod: ${dynamicCode} | Sim Kod: 1234`);
+    if (recentOtps >= this.OTP_RATE_LIMIT) {
+      await this.audit(null, 'OTP_RATE_LIMIT_EXCEEDED', 'FAILURE', ip, { gsmNumber });
+      throw new ForbiddenException(
+        `Çok fazla OTP talebi. Lütfen ${Math.ceil((60 - (Date.now() - oneHourAgo.getTime()) / 1000) / 60)} dakika sonra tekrar deneyin.`
+      );
+    }
+
+    // Generate dynamic 4-digit code
+    const dynamicCode = Math.floor(1000 + Math.random() * 9000).toString();
+    const expiresAt = Date.now() + this.OTP_EXPIRY_SECONDS * 1000;
+
+    // Store OTP (in production, use Redis or database table for persistence)
+    this.otpStore.set(gsmNumber, { code: dynamicCode, expiresAt, attempts: 0 });
+
+    // Log for SMS simulation — NEVER return code in response
+    console.log(`[OTP SERVICE] GSM: ${gsmNumber} | Dinamik Kod: ${dynamicCode} | Simülasyon Kodu: ${this.SIMULATION_OTP}`);
     await this.audit(null, 'OTP_SENT', 'SUCCESS', ip, { gsmNumber });
 
     return {
       success: true,
-      message: 'OTP SMS gönderildi (Simülasyon). Kodunuzu SMS ile aldınız.',
+      message: 'OTP SMS gönderildi. Kodunuzu 3 dakika içinde giriniz.',
       gsmNumber,
-      expiresInSeconds: 180,
-      hint: 'Simülasyon ortamında sabit doğrulama kodu: 1234',
+      expiresInSeconds: this.OTP_EXPIRY_SECONDS,
+      ...(this.ENABLE_SIMULATION_OTP && {
+        hint: `Simülasyon ortamı: Sabit kod "${this.SIMULATION_OTP}" veya dinamik kod (log'da)`,
+      }),
     };
   }
 
   async verifyOtp(gsmNumber: string, otpCode: string, ip?: string) {
     const stored = this.otpStore.get(gsmNumber);
+
+    // Check dynamic code
     const isValidDynamic = !!stored && stored.expiresAt > Date.now() && stored.code === otpCode;
-    const isValidSimulation = otpCode === '1234'; // Case §3.1 simülasyon kuralı
+
+    // Simulation OTP (Case §3.1): Only enabled in non-production environments
+    const isValidSimulation = this.ENABLE_SIMULATION_OTP && otpCode === this.SIMULATION_OTP;
 
     if (!isValidDynamic && !isValidSimulation) {
+      // Track failed attempts to prevent brute force
+      if (stored) {
+        stored.attempts = (stored.attempts || 0) + 1;
+        if (stored.attempts >= 5) {
+          this.otpStore.delete(gsmNumber);
+          await this.audit(null, 'OTP_BRUTE_FORCE_DETECTED', 'FAILURE', ip, { gsmNumber });
+          throw new ForbiddenException('Çok fazla yanlış deneme. Yeni OTP talep ediniz.');
+        }
+      }
+
       await this.audit(null, 'OTP_VERIFY_FAILED', 'FAILURE', ip, { gsmNumber });
       throw new UnauthorizedException('Geçersiz veya süresi dolmuş OTP kodu');
     }

@@ -54,32 +54,9 @@ function SubscriberDashboardContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
 
-  const [offers, setOffers] = useState<Offer[]>([
-    {
-      id: 'camp-101', code: 'CMP-2026-000101',
-      name: 'Yüksek Değerli Abone 20GB Ek Paket',
-      type: 'EK_PAKET', typeLabel: 'Ek Paket',
-      discountPercent: 30, aiScore: 94, conversionProbability: 85,
-      reasoning: 'AI Analizi: Aylık 35 GB yüksek veri tüketiminiz, 24 aylık sadakatiniz ve son 3 kampanyayı kabul etmeniz nedeniyle %30 indirimli 20GB Ek Paket önerilmiştir. Veri kullanım trendiniz aylık %15 artış göstermektedir.',
-      segment: 'YÜKSEK DEĞER', validUntil: '2026-07-31', status: 'PENDING', icon: Package,
-    },
-    {
-      id: 'camp-102', code: 'CMP-2026-000102',
-      name: 'Turkcell Super 50GB Platinum Tarife Fırsatı',
-      type: 'TARIFE_YUKSELTME', typeLabel: 'Tarife Yükseltme',
-      discountPercent: 25, aiScore: 88, conversionProbability: 78,
-      reasoning: 'AI Analizi: Mevcut tarifeniz dolmak üzeredir. Yüksek ARPU kategorisinde olduğunuz için sınırsız sosyal medya ve 50GB internet içeren Platinum tarife öncelikli sunulmuştur.',
-      segment: 'SADAKAT', validUntil: '2026-08-15', status: 'PENDING', icon: Smartphone,
-    },
-    {
-      id: 'camp-103', code: 'CMP-2026-000103',
-      name: 'Özel Dijital Servisler (TV+ & Fizy) Fırsatı',
-      type: 'SADAKAT', typeLabel: 'Sadakat / Servis',
-      discountPercent: 50, aiScore: 76, conversionProbability: 68,
-      reasoning: 'AI Analizi: Hafta sonu veri tespiti doğrultusunda TV+ ve Fizy premium dijital yayın paketi %50 indirimli tanımlanmıştır.',
-      segment: 'GENEL ABONE', validUntil: '2026-07-28', status: 'PENDING', icon: Zap,
-    },
-  ]);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [activeCampaigns, setActiveCampaigns] = useState<Offer[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState<'offers' | 'my_campaigns'>('offers');
 
@@ -89,16 +66,123 @@ function SubscriberDashboardContent() {
     }
   }, [tabParam]);
 
-  const handleRespond = (id: string, response: 'ACCEPTED' | 'REJECTED') => {
-    setOffers(prev => prev.map(o => o.id === id ? { ...o, status: response } : o));
+  // Load data from backend
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const { api } = await import('@/lib/api');
+      const [recommendations, activeCamps] = await Promise.all([
+        api.getSubscriberRecommendations(),
+        api.getMyActiveCampaigns(),
+      ]);
+
+      // Map backend recommendations to Offer format
+      const mappedOffers: Offer[] = recommendations.map((r: any) => ({
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        type: r.type,
+        typeLabel: getTypeLabel(r.type),
+        discountPercent: r.discountPercent || 0,
+        aiScore: Math.round((r.aiScore || 0) * 100),
+        conversionProbability: Math.round((r.conversionProbability || 0) * 100),
+        reasoning: `AI Analizi: Bu kampanya sizin için ${r.aiScore >= 0.80 ? 'öncelikli' : 'uygun'} olarak değerlendirilmiştir.`,
+        segment: r.targetSegment || 'GENEL',
+        validUntil: r.endDate ? new Date(r.endDate).toLocaleDateString('tr-TR') : '2026-12-31',
+        status: r.existingFeedback ? r.existingFeedback.response : 'PENDING',
+        userRating: r.existingFeedback?.rating,
+        icon: getIcon(r.type),
+      }));
+
+      const mappedActive: Offer[] = activeCamps.map((c: any) => ({
+        id: c.id,
+        code: c.code,
+        name: c.name,
+        type: c.type,
+        typeLabel: getTypeLabel(c.type),
+        discountPercent: c.discountPercent || 0,
+        aiScore: 0,
+        conversionProbability: 0,
+        reasoning: '',
+        segment: c.targetSegment || 'GENEL',
+        validUntil: c.endDate ? new Date(c.endDate).toLocaleDateString('tr-TR') : '2026-12-31',
+        status: 'ACCEPTED',
+        userRating: c.rating,
+        icon: getIcon(c.type),
+      }));
+
+      setOffers(mappedOffers);
+      setActiveCampaigns(mappedActive);
+    } catch (err) {
+      console.error('Failed to load subscriber data:', err);
+      // Fallback to mock data
+      setOffers([
+        {
+          id: 'camp-101', code: 'CMP-2026-000101',
+          name: 'Yüksek Değerli Abone 20GB Ek Paket',
+          type: 'EK_PAKET', typeLabel: 'Ek Paket',
+          discountPercent: 30, aiScore: 94, conversionProbability: 85,
+          reasoning: 'AI Analizi: Aylık 35 GB yüksek veri tüketiminiz, 24 aylık sadakatiniz ve son 3 kampanyayı kabul etmeniz nedeniyle %30 indirimli 20GB Ek Paket önerilmiştir. Veri kullanım trendiniz aylık %15 artış göstermektedir.',
+          segment: 'YÜKSEK DEĞER', validUntil: '2026-07-31', status: 'PENDING', icon: Package,
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleRate = (id: string, rating: number) => {
-    setOffers(prev => prev.map(o => o.id === id ? { ...o, userRating: rating } : o));
+  const getTypeLabel = (type: string): string => {
+    const labels: Record<string, string> = {
+      'EK_PAKET': 'Ek Paket',
+      'TARIFE_YUKSELTME': 'Tarife Yükseltme',
+      'CIHAZ_FIRSATI': 'Cihaz Fırsatı',
+      'SADAKAT': 'Sadakat',
+    };
+    return labels[type] || type;
+  };
+
+  const getIcon = (type: string) => {
+    const icons: Record<string, React.ElementType> = {
+      'EK_PAKET': Package,
+      'TARIFE_YUKSELTME': Smartphone,
+      'CIHAZ_FIRSATI': Gift,
+      'SADAKAT': Heart,
+    };
+    return icons[type] || Zap;
+  };
+
+  const handleRespond = async (id: string, response: 'ACCEPTED' | 'REJECTED') => {
+    try {
+      const { api } = await import('@/lib/api');
+      await api.submitSubscriberFeedback(id, response);
+      // Reload data
+      await loadData();
+    } catch (err) {
+      console.error('Failed to submit feedback:', err);
+      // Optimistic update as fallback
+      setOffers(prev => prev.map(o => o.id === id ? { ...o, status: response } : o));
+    }
+  };
+
+  const handleRate = async (id: string, rating: number) => {
+    try {
+      const { api } = await import('@/lib/api');
+      await api.submitSubscriberFeedback(id, 'ACCEPTED', undefined, rating);
+      // Update local state
+      setActiveCampaigns(prev => prev.map(o => o.id === id ? { ...o, userRating: rating } : o));
+    } catch (err) {
+      console.error('Failed to submit rating:', err);
+      // Optimistic update
+      setActiveCampaigns(prev => prev.map(o => o.id === id ? { ...o, userRating: rating } : o));
+    }
   };
 
   const pendingOffers = offers.filter(o => o.status === 'PENDING');
-  const acceptedOffers = offers.filter(o => o.status === 'ACCEPTED');
+  const acceptedOffers = activeCampaigns;
 
   return (
     <DashboardShell

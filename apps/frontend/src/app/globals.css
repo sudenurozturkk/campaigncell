@@ -5,20 +5,26 @@
 @tailwind utilities;
 
 :root {
-  --background: #F4F6FB;
+  --background: #F8FAFC;
   --foreground: #0F172A;
   --card-bg: #FFFFFF;
   --card-border: #E2E8F0;
   --turkcell-yellow: #FFC72C;
   --turkcell-blue: #0057B8;
   --turkcell-navy: #002561;
+  --text-primary: #1E293B;
+  --text-secondary: #475569;
+  --text-tertiary: #64748B;
 }
 
 .dark {
-  --background: #050810;
-  --foreground: #F8FAFC;
-  --card-bg: rgba(12, 18, 34, 0.75);
-  --card-border: rgba(255, 255, 255, 0.08);
+  --background: #0F172A;
+  --foreground: #F1F5F9;
+  --card-bg: #1E293B;
+  --card-border: #334155;
+  --text-primary: #F1F5F9;
+  --text-secondary: #CBD5E1;
+  --text-tertiary: #94A3B8;
 }
 
 * {
@@ -51,21 +57,24 @@ body {
 .glass-card {
   background: var(--card-bg);
   border: 1px solid var(--card-border);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .dark .glass-card {
-  background: rgba(12, 18, 34, 0.75);
-  backdrop-filter: blur(16px) saturate(180%);
-  -webkit-backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
 .glass-card:hover {
-  border-color: rgba(0, 87, 184, 0.4);
-  box-shadow: 0 10px 30px rgba(0, 87, 184, 0.1);
+  border-color: #0057B8;
+  box-shadow: 0 8px 20px rgba(0, 87, 184, 0.12);
+}
+
+.dark .glass-card:hover {
+  border-color: #FFC72C;
+  box-shadow: 0 8px 20px rgba(255, 199, 44, 0.15);
 }
 
 .glass-modal {
@@ -75,24 +84,23 @@ body {
 }
 
 .dark .glass-modal {
-  background: rgba(8, 14, 30, 0.95);
-  backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 199, 44, 0.2);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  background: #1E293B;
+  border: 1px solid #475569;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
 }
 
 /* ===== HERO GRADIENT ===== */
 .hero-gradient {
   background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 87, 184, 0.08) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 87, 184, 0.06) 0%, transparent 60%),
     linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);
 }
 
 .dark .hero-gradient {
   background:
-    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 87, 184, 0.25) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 80% 50%, rgba(255, 199, 44, 0.08) 0%, transparent 50%),
-    linear-gradient(180deg, #050810 0%, #080E1A 50%, #050810 100%);
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(0, 87, 184, 0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 50%, rgba(255, 199, 44, 0.06) 0%, transparent 50%),
+    linear-gradient(180deg, #0F172A 0%, #1E293B 50%, #0F172A 100%);
 }
 
 /* ===== GRADIENT TEXT ===== */

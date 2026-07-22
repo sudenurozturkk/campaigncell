@@ -29,9 +29,9 @@ module.exports = {
           lightBlue: '#1D70B8',
           yellow: '#FFC72C',
           gold: '#F2A900',
-          darkBg: '#050810',
-          cardBg: '#0C1222',
-          cardBorder: '#1A2235',
+          darkBg: '#0F172A',
+          cardBg: '#1E293B',
+          cardBorder: '#334155',
         },
       },
       fontFamily: {

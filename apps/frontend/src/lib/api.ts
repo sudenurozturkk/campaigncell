@@ -252,6 +252,57 @@ class CampaignCellApiClient {
       ],
     };
   }
+
+  // ===== SUBSCRIBER ENDPOINTS (Abone Önerileri ve Feedback) =====
+  async getSubscriberRecommendations() {
+    try {
+      const res = await fetch(`${this.gatewayUrl}/api/v1/campaigns/subscriber/recommendations`, {
+        headers: this.getHeaders(),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // Fallback
+    }
+    return [];
+  }
+
+  async submitSubscriberFeedback(campaignId: string, response: 'ACCEPTED' | 'REJECTED', rejectionReason?: string, rating?: number) {
+    try {
+      const res = await fetch(`${this.gatewayUrl}/api/v1/campaigns/subscriber/feedback`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          campaignId,
+          subscriberId: 'will-be-set-by-backend',
+          response,
+          rejectionReason,
+          rating,
+        }),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (err) {
+      console.error('Feedback submission error:', err);
+    }
+    return null;
+  }
+
+  async getMyActiveCampaigns() {
+    try {
+      const res = await fetch(`${this.gatewayUrl}/api/v1/campaigns/subscriber/my-campaigns`, {
+        headers: this.getHeaders(),
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // Fallback
+    }
+    return [];
+  }
 }
 
 export const api = new CampaignCellApiClient();

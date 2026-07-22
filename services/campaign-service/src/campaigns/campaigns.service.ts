@@ -373,4 +373,130 @@ export class CampaignsService {
 
     return archived;
   }
+
+  /**
+   * Subscriber-specific methods: Abone için özelleştirilmiş kampanya önerileri
+   */
+  async getSubscriberRecommendations(subscriberId: string, segment?: string) {
+    // AKTIF kampanyaları getir
+    const campaigns = await this.prisma.campaign.findMany({
+      where: {
+        status: CampaignStatusEnum.ACTIVE,
+        ...(segment && { targetSegment: segment as TargetSegmentEnum }),
+      },
+      orderBy: [
+        { aiRecommendationScore: 'desc' },
+        { createdAt: 'desc' },
+      ],
+      take: 10,
+    });
+
+    // Bu abonenin daha önce verdiği feedbackleri kontrol et
+    const existingFeedbacks = await this.prisma.subscriberFeedback.findMany({
+      where: { subscriberId },
+      select: { campaignId: true, response: true, rating: true },
+    });
+
+    const feedbackMap = new Map(existingFeedbacks.map(f => [f.campaignId, f]));
+
+    const recommendations = campaigns.map(c => ({
+      id: c.id,
+      code: c.code,
+      name: c.name,
+      description: c.description,
+      type: c.type,
+      discountPercent: c.discountPercent ? parseFloat(c.discountPercent.toString()) : 0,
+      targetSegment: c.targetSegment,
+      aiScore: c.aiRecommendationScore ? parseFloat(c.aiRecommendationScore.toString()) : 0,
+      conversionProbability: c.aiConversionProbability ? parseFloat(c.aiConversionProbability.toString()) : 0,
+      startDate: c.startDate,
+      endDate: c.endDate,
+      // Frontend'de durumu göstermek için feedback bilgisi
+      existingFeedback: feedbackMap.get(c.id) || null,
+    }));
+
+    return recommendations;
+  }
+
+  async submitSubscriberFeedback(dto: any) {
+    // Campaign var mı kontrol et
+    const campaign = await this.prisma.campaign.findUnique({
+      where: { id: dto.campaignId },
+    });
+
+    if (!campaign) {
+      throw new NotFoundException(`Kampanya bulunamadı (ID: ${dto.campaignId})`);
+    }
+
+    // Aynı kampanya için duplicate feedback kontrolü (güncelleme yap)
+    const existing = await this.prisma.subscriberFeedback.findFirst({
+      where: {
+        campaignId: dto.campaignId,
+        subscriberId: dto.subscriberId,
+      },
+    });
+
+    let feedback;
+    if (existing) {
+      // Mevcut feedback'i güncelle
+      feedback = await this.prisma.subscriberFeedback.update({
+        where: { id: existing.id },
+        data: {
+          response: dto.response,
+          rejectionReason: dto.rejectionReason,
+          rating: dto.rating,
+        },
+      });
+    } else {
+      // Yeni feedback oluştur
+      feedback = await this.prisma.subscriberFeedback.create({
+        data: {
+          campaignId: dto.campaignId,
+          subscriberId: dto.subscriberId,
+          response: dto.response,
+          rejectionReason: dto.rejectionReason,
+          rating: dto.rating,
+        },
+      });
+    }
+
+    // Event fırlat
+    await this.rabbitmq.publishEvent('subscriber.feedback.submitted', {
+      feedback_id: feedback.id,
+      campaign_id: dto.campaignId,
+      subscriber_id: dto.subscriberId,
+      response: dto.response,
+      rating: dto.rating,
+      timestamp: new Date().toISOString(),
+    });
+
+    return feedback;
+  }
+
+  async getMyActiveCampaigns(subscriberId: string) {
+    // Kabul edilmiş feedbackleri bul
+    const acceptedFeedbacks = await this.prisma.subscriberFeedback.findMany({
+      where: {
+        subscriberId,
+        response: 'ACCEPTED',
+      },
+      include: {
+        campaign: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return acceptedFeedbacks.map(f => ({
+      id: f.campaign.id,
+      code: f.campaign.code,
+      name: f.campaign.name,
+      description: f.campaign.description,
+      type: f.campaign.type,
+      discountPercent: f.campaign.discountPercent ? parseFloat(f.campaign.discountPercent.toString()) : 0,
+      startDate: f.campaign.startDate,
+      endDate: f.campaign.endDate,
+      acceptedAt: f.createdAt,
+      rating: f.rating,
+    }));
+  }
 }
