@@ -5,36 +5,36 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Seeding Gamification Service Database...');
 
-  // Badges
+  // Badges (Case §6.2 — kazanılma koşulları)
   const badges = [
-    { code: 'ILK_KAMPANYA', name: 'İlk Kampanya', description: 'İlk kampanyayı başarıyla tamamlayan uzmana verilir.' },
-    { code: 'HIZ_USTASI', name: 'Hız Ustası', description: '2 saatten kısa sürede vaka optimizasyonu yapan uzmana verilir.' },
-    { code: 'DONUSUM_KRALI', name: 'Dönüşüm Kralı', description: '%80+ dönüşüm oranına ulaşan uzmana verilir.' },
-    { code: 'MARATONCU', name: 'Maratoncu', description: '20+ vaka tamamlayan uzmana verilir.' },
-    { code: 'CHURN_AVCISI', name: 'Churn Avcısı', description: '5+ churn riski bulunan vakayı çözen uzmana verilir.' },
-    { code: 'UZMAN', name: 'Uzman', description: '50+ vaka tamamlayan kıdemli uzmana verilir.' },
+    { code: 'ILK_KAMPANYA', name: 'İlk Kampanya', description: 'İlk optimizasyonu tamamlama.' },
+    { code: 'HIZ_USTASI', name: 'Hız Ustası', description: '2 saatin altında 10 optimizasyon tamamlama.' },
+    { code: 'DONUSUM_KRALI', name: 'Dönüşüm Kralı', description: '10 kampanyada dönüşüm hedefini aşma.' },
+    { code: 'MARATONCU', name: 'Maratoncu', description: 'Bir günde 20 optimizasyon tamamlama.' },
+    { code: 'CHURN_AVCISI', name: 'Churn Avcısı', description: '10 RISKLI_KAYIP vakayı kurtarma.' },
+    { code: 'UZMAN', name: 'Uzman', description: 'Tek segmentte 50 optimizasyon tamamlama.' },
   ];
 
   for (const badge of badges) {
     await prisma.badge.upsert({
       where: { code: badge.code },
-      update: {},
+      update: { name: badge.name, description: badge.description },
       create: badge,
     });
   }
 
-  // Levels
+  // Levels (Case §6.3 — Platin 3.000+ üst sınırsız)
   const levels = [
     { name: 'Bronz', minPoints: 0, maxPoints: 499 },
     { name: 'Gümüş', minPoints: 500, maxPoints: 1499 },
     { name: 'Altın', minPoints: 1500, maxPoints: 2999 },
-    { name: 'Platin', minPoints: 3000, maxPoints: 5000 },
+    { name: 'Platin', minPoints: 3000, maxPoints: null as number | null },
   ];
 
   for (const level of levels) {
     await prisma.level.upsert({
       where: { name: level.name },
-      update: {},
+      update: { minPoints: level.minPoints, maxPoints: level.maxPoints },
       create: level,
     });
   }

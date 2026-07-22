@@ -1,12 +1,15 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import DashboardShell from '../../../components/DashboardShell';
 import {
   Trophy, Award, Star, Zap, Target, Shield, Medal, Flame,
   TrendingUp, CheckCircle2, Clock, BarChart3, AlertTriangle,
   Package, Brain
 } from 'lucide-react';
+
+// Kullanıcıya özel, kimlik doğrulamalı sayfa → statik prerender kapalı (useSearchParams CSR bailout'unu önler).
+export const dynamic = 'force-dynamic';
 
 const BADGE_DATA = [
   { key: 'ILK_KAMPANYA', icon: Star, color: 'blue', label: 'İlk Kampanya', desc: 'İlk kampanyayı tamamla', earned: true },
@@ -43,6 +46,14 @@ function ScoreRing({ value, size = 100, color }: { value: number; size?: number;
 }
 
 export default function ExpertProfilePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 dark:bg-[#050810]" />}>
+      <ExpertProfilePageInner />
+    </Suspense>
+  );
+}
+
+function ExpertProfilePageInner() {
   const expert = {
     name: 'Ahmet Yılmaz',
     email: 'ahmet@turkcell.com.tr',

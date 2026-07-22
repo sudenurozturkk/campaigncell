@@ -29,6 +29,7 @@ export class LeaderboardService {
       where.createdAt = { gte: startOfWeek };
     }
 
+    // Case §6.4: liderlik tablosu ilk 10 kişi, puan sıralı.
     const grouped = await this.prisma.pointsTransaction.groupBy({
       by: ['expertId'],
       where,
@@ -40,6 +41,7 @@ export class LeaderboardService {
           points: 'desc',
         },
       },
+      take: 10,
     });
 
     const leaderboard = await Promise.all(

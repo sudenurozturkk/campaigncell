@@ -67,15 +67,25 @@ def recommend_campaign(req: RecommendRequest, db: Session = Depends(get_db)):
             'data_usage_trend_pct': 10.0,
         }
 
-    # 2. AI Tahmini Üret
+    # 2. AI Tahmini Üret (kampanya tipi skoru etkiler → her kampanya için farklı skor)
     engine = PredictorEngine()
-    prediction_result = engine.predict(features)
+    prediction_result = engine.predict(features, campaign_type=req.campaign_type)
 
-    # 3. Uzman Önerisi Hesapla
+    # Case §5.1 eşikleri: skor < 0.60 gösterilmez, > 0.80 öncelikli
+    rec_score = prediction_result['recommendation_score']
+    show_to_subscriber = rec_score >= 0.60
+    priority_display = rec_score > 0.80
+
+    # 3. Uzman Önerisi Hesapla (Case §5.3 formülü + kapasite/kuyruk)
     best_expert = find_best_expert_for_case(
         target_segment=prediction_result['predicted_segment'],
         campaign_type=req.campaign_type or "EK_PAKET"
     )
+    expert_info = None
+    recommended_expert_id = None
+    if best_expert:
+        expert_info = ExpertScoreInfo(**best_expert)
+        recommended_expert_id = best_expert.get("expert_id")
 
     # 4. Aktif Model Versiyonunu DB'den bul veya ekle
     active_mv = db.query(ModelVersion).filter(ModelVersion.version_tag == engine.version_tag).first()
@@ -120,7 +130,9 @@ def recommend_campaign(req: RecommendRequest, db: Session = Depends(get_db)):
         "conversion_probability": prediction_result['conversion_probability'],
         "predicted_segment": prediction_result['predicted_segment'],
         "predicted_priority": prediction_result['predicted_priority'],
-        "recommended_expert_id": best_expert["expert_id"] if best_expert else None,
+        "recommendation_score": rec_score,
+        "conversion_probability": prediction_result['conversion_probability'],
+        "recommended_expert_id": recommended_expert_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     })
 
@@ -129,12 +141,14 @@ def recommend_campaign(req: RecommendRequest, db: Session = Depends(get_db)):
         subscriber_id=req.subscriber_id,
         campaign_id=req.campaign_id,
         case_id=req.case_id,
-        recommendation_score=prediction_result['recommendation_score'],
+        recommendation_score=rec_score,
         conversion_probability=prediction_result['conversion_probability'],
         predicted_segment=prediction_result['predicted_segment'],
         predicted_priority=prediction_result['predicted_priority'],
         reasoning=prediction_result['reasoning'],
-        recommended_expert=ExpertScoreInfo(**best_expert) if best_expert else None,
+        show_to_subscriber=show_to_subscriber,
+        priority_display=priority_display,
+        recommended_expert=expert_info,
         model_version=engine.version_tag,
     )
 
@@ -193,10 +207,11 @@ def get_ai_accuracy(db: Session = Depends(get_db)):
     misclassified_count = db.query(Prediction).filter(Prediction.is_ai_misclassified == True).count()
     corrections_count = db.query(PredictionCorrection).count()
 
+    engine = PredictorEngine()
     if total_predictions > 0:
         accuracy_pct = round(((total_predictions - misclassified_count) / total_predictions) * 100.0, 2)
     else:
-        engine = PredictorEngine()
+        # Canlı tahmin yoksa modelin test doğruluğu gösterilir (uydurma değil, gerçek model metriği).
         accuracy_pct = round(engine.active_accuracy * 100.0, 2)
 
     active_mv = db.query(ModelVersion).filter(ModelVersion.is_active == True).first()
@@ -209,24 +224,21 @@ def get_ai_accuracy(db: Session = Depends(get_db)):
         cat_total = db.query(Prediction).filter(Prediction.predicted_segment == cat).count()
         cat_misclassified = db.query(Prediction).filter(Prediction.predicted_segment == cat, Prediction.is_ai_misclassified == True).count()
         cat_correct = max(0, cat_total - cat_misclassified)
-
-        if cat_total > 0:
-            cat_acc = round((cat_correct / cat_total) * 100.0, 2)
-        else:
-            cat_acc = 90.0 if cat == "YUKSEK_DEGER" else 88.0 if cat == "RISKLI_KAYIP" else 85.0
+        # Gerçek veriye dayalı — hardcoded fallback YOK. Veri yoksa 0 döner (dürüst metrik).
+        cat_acc = round((cat_correct / cat_total) * 100.0, 2) if cat_total > 0 else 0.0
 
         category_breakdown[cat] = {
-            "total": cat_total if cat_total > 0 else 100,
-            "correct": cat_correct if cat_total > 0 else 88,
+            "total": cat_total,
+            "correct": cat_correct,
             "accuracy_pct": cat_acc,
         }
 
     return AccuracyResponse(
-        total_predictions=total_predictions if total_predictions > 0 else 1420,
+        total_predictions=total_predictions,
         misclassified_count=misclassified_count,
         corrected_predictions_count=corrections_count,
         accuracy_percentage=accuracy_pct,
-        active_model_version=active_mv.version_tag if active_mv else "v1.0-rf",
+        active_model_version=active_mv.version_tag if active_mv else engine.version_tag,
         category_breakdown=category_breakdown,
     )
 

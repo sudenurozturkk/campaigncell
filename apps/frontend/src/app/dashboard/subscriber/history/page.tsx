@@ -1,11 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import DashboardShell from '../../../components/DashboardShell';
 import {
   History, CheckCircle2, XCircle, Star, Package, Smartphone,
   Heart, Filter, Search, Calendar, ArrowUpDown
 } from 'lucide-react';
+
+// Kullanıcıya özel, kimlik doğrulamalı sayfa → statik prerender kapalı (useSearchParams CSR bailout'unu önler).
+export const dynamic = 'force-dynamic';
 
 interface HistoryItem {
   id: string;
@@ -22,6 +25,14 @@ interface HistoryItem {
 }
 
 export default function SubscriberHistoryPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 dark:bg-[#050810]" />}>
+      <SubscriberHistoryPageInner />
+    </Suspense>
+  );
+}
+
+function SubscriberHistoryPageInner() {
   const [filter, setFilter] = useState<'ALL' | 'ACCEPTED' | 'REJECTED'>('ALL');
   const [search, setSearch] = useState('');
 

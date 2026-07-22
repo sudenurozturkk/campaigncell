@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 
@@ -77,3 +78,36 @@ def generate_synthetic_telecom_dataset(num_samples: int = 1000, seed: int = 42) 
     })
 
     return df
+
+
+def _turkish_profile_description(row) -> str:
+    """Her satır için gerçekçi Türkçe abone profili açıklaması üretir (Case §5.1)."""
+    parts = []
+    parts.append(f"{int(row['tenure_months'])} aylık abone")
+    parts.append(f"aylık {row['monthly_data_usage_gb']:.1f} GB veri ve {int(row['monthly_voice_min'])} dk konuşma")
+    parts.append(f"ortalama {row['monthly_spend_try']:.0f} TL harcama (ARPU)")
+    if row['complaint_count'] >= 2:
+        parts.append(f"{int(row['complaint_count'])} şikayet kaydı (memnuniyetsiz)")
+    if row['data_usage_trend_pct'] < -20:
+        parts.append(f"veri kullanımı %{abs(row['data_usage_trend_pct']):.0f} düşüşte (churn sinyali)")
+    if row['past_accepted_count'] >= 2:
+        parts.append(f"geçmişte {int(row['past_accepted_count'])} teklif kabul etmiş sadık müşteri")
+    return ", ".join(parts) + "."
+
+
+def export_dataset_csv(path: str, num_samples: int = 1200, seed: int = 42) -> str:
+    """
+    Eğitim/test veri setini Türkçe profil açıklamalarıyla birlikte CSV olarak diske yazar.
+    Repository'de paylaşılan eğitim verisini üretmek için kullanılır (Case §5.1 bonus).
+    """
+    df = generate_synthetic_telecom_dataset(num_samples=num_samples, seed=seed)
+    df.insert(0, 'profile_description_tr', df.apply(_turkish_profile_description, axis=1))
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    df.to_csv(path, index=False, encoding='utf-8')
+    return path
+
+
+if __name__ == "__main__":
+    out = os.path.join(os.path.dirname(__file__), "..", "..", "data", "training_dataset.csv")
+    export_dataset_csv(os.path.abspath(out))
+    print(f"Dataset yazıldı: {out}")

@@ -47,6 +47,27 @@ interface BenchmarkResult {
   cv_std_pct: number;
 }
 
+interface LiveAccuracy {
+  accuracy_percentage: number;
+  total_predictions: number;
+  misclassified_count: number;
+  corrected_predictions_count: number;
+  active_model_version: string;
+  categories: { name: string; total: number; correct: number; accuracy_pct: number }[];
+}
+
+const SEGMENT_LABELS: Record<string, string> = {
+  YUKSEK_DEGER: 'YÜKSEK DEĞER',
+  RISKLI_KAYIP: 'RİSKLİ KAYIP',
+  YENI_ABONE: 'YENİ ABONE',
+  PASIF: 'PASİF ABONE',
+};
+
+const authHeaders = (): HeadersInit => {
+  const t = typeof window !== 'undefined' ? localStorage.getItem('cc_token') : null;
+  return t ? { Authorization: `Bearer ${t}` } : {};
+};
+
 const BADGE_ICONS: Record<string, { icon: React.ElementType; color: string; label: string }> = {
   ILK_KAMPANYA: { icon: Star, color: 'text-blue-600 dark:text-blue-400', label: 'İlk Kampanya' },
   HIZ_USTASI: { icon: Zap, color: 'text-amber-600 dark:text-amber-400', label: 'Hız Ustası' },
@@ -86,8 +107,10 @@ function SupervisorDashboardContent() {
   const [activeTab, setActiveTab] = useState<'overview' | 'leaderboard' | 'ai_accuracy' | 'sla'>('overview');
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkResult[]>(INITIAL_BENCHMARK);
   const [featuresData, setFeaturesData] = useState<FeatureImportance[]>(INITIAL_FEATURES);
+  const [liveAccuracy, setLiveAccuracy] = useState<LiveAccuracy | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [demoSimulating, setDemoSimulating] = useState(false);
+  const [isLive, setIsLive] = useState(false);
 
   // Sync tab with URL parameter using Next.js App Router hooks
   useEffect(() => {
@@ -96,7 +119,7 @@ function SupervisorDashboardContent() {
     }
   }, [tabParam]);
 
-  const leaderboard: LeaderboardEntry[] = [
+  const DEMO_LEADERBOARD: LeaderboardEntry[] = [
     { rank: 1, name: 'Ahmet Yılmaz', level: 'Platin', points: 3450, badges: ['ILK_KAMPANYA', 'HIZ_USTASI', 'DONUSUM_KRALI', 'CHURN_AVCISI'], completedCases: 48, avgSlaHours: 1.4, isCurrentUser: true },
     { rank: 2, name: 'Ayşe Kaya', level: 'Altın', points: 2280, badges: ['ILK_KAMPANYA', 'DONUSUM_KRALI', 'MARATONCU'], completedCases: 34, avgSlaHours: 2.1, isCurrentUser: false },
     { rank: 3, name: 'Mehmet Demir', level: 'Altın', points: 1890, badges: ['ILK_KAMPANYA', 'HIZ_USTASI'], completedCases: 29, avgSlaHours: 3.2, isCurrentUser: false },
@@ -104,18 +127,22 @@ function SupervisorDashboardContent() {
     { rank: 5, name: 'Caner Şahin', level: 'Bronz', points: 420, badges: ['ILK_KAMPANYA'], completedCases: 8, avgSlaHours: 4.5, isCurrentUser: false },
   ];
 
-  const slaCases: SlaEntry[] = [
+  const DEMO_SLA: SlaEntry[] = [
     { caseCode: 'CMP-2026-000102', campaignName: 'Riskli Kayıp Abone Çözüm Kampanyası', priority: 'KRİTİK', status: 'ATANDI', slaHours: 2, remainingHours: 0.8, expert: 'Ahmet Yılmaz', breached: false },
     { caseCode: 'CMP-2026-000105', campaignName: 'Eski Tarife Yenileme Fırsatı', priority: 'YÜKSEK', status: 'OPTIMIZE_EDILIYOR', slaHours: 8, remainingHours: 2.1, expert: 'Ayşe Kaya', breached: false },
     { caseCode: 'CMP-2026-000099', campaignName: 'Cihaz Kampanyası Segment Düzeltme', priority: 'KRİTİK', status: 'YENİ', slaHours: 2, remainingHours: 0, expert: 'Atanmadı', breached: true },
   ];
 
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(DEMO_LEADERBOARD);
+  const [slaCases, setSlaCases] = useState<SlaEntry[]>(DEMO_SLA);
+
   const loadAiAnalytics = async () => {
     setIsAiLoading(true);
     try {
-      const [bmRes, featRes] = await Promise.all([
+      const [bmRes, featRes, accRes] = await Promise.all([
         fetch(`${API_GW}/api/v1/ai/benchmark`),
         fetch(`${API_GW}/api/v1/ai/feature-importance`),
+        fetch(`${API_GW}/api/v1/ai/accuracy`, { headers: authHeaders() }),
       ]);
       if (bmRes.ok) {
         const d = await bmRes.json();
@@ -129,6 +156,23 @@ function SupervisorDashboardContent() {
           setFeaturesData(d.feature_importances);
         }
       }
+      if (accRes.ok) {
+        const d = await accRes.json();
+        const cb = d.category_breakdown || {};
+        setLiveAccuracy({
+          accuracy_percentage: d.accuracy_percentage ?? 0,
+          total_predictions: d.total_predictions ?? 0,
+          misclassified_count: d.misclassified_count ?? 0,
+          corrected_predictions_count: d.corrected_predictions_count ?? 0,
+          active_model_version: d.active_model_version ?? '-',
+          categories: Object.keys(cb).map((k) => ({
+            name: SEGMENT_LABELS[k] || k,
+            total: cb[k].total ?? 0,
+            correct: cb[k].correct ?? 0,
+            accuracy_pct: cb[k].accuracy_pct ?? 0,
+          })),
+        });
+      }
     } catch {
       // Fallback stays active
     } finally {
@@ -136,8 +180,62 @@ function SupervisorDashboardContent() {
     }
   };
 
+  // Gerçek liderlik tablosu ve SLA verisini (canlı backend) yükler; hata olursa demo veri kalır.
+  const loadOperationalData = async () => {
+    try {
+      const lbRes = await fetch(`${API_GW}/api/v1/game/leaderboard?period=ALL_TIME`, { headers: authHeaders() });
+      if (lbRes.ok) {
+        const d = await lbRes.json();
+        const rows = Array.isArray(d) ? d : d.leaderboard || [];
+        if (rows.length > 0) {
+          setLeaderboard(
+            rows.map((r: Record<string, unknown>, i: number) => ({
+              rank: (r.rank as number) ?? i + 1,
+              name: (r.name as string) || `Uzman ${String(r.expertId || '').slice(0, 8)}`,
+              level: (r.level as string) || 'Bronz',
+              points: (r.totalPoints as number) ?? (r.points as number) ?? 0,
+              badges: (r.badges as string[]) || [],
+              completedCases: (r.completedCases as number) ?? (r.earnedBadgesCount as number) ?? 0,
+              avgSlaHours: (r.avgSlaHours as number) ?? 0,
+              isCurrentUser: false,
+            })),
+          );
+          setIsLive(true);
+        }
+      }
+
+      const casesRes = await fetch(`${API_GW}/api/v1/cases?limit=50`, { headers: authHeaders() });
+      if (casesRes.ok) {
+        const d = await casesRes.json();
+        const items = Array.isArray(d) ? d : d.items || [];
+        const mapped: SlaEntry[] = items
+          .filter((c: Record<string, unknown>) => c.slaStatus === 'WARNING' || c.slaStatus === 'BREACHED')
+          .map((c: Record<string, unknown>) => {
+            const campaign = (c.campaign as Record<string, unknown>) || {};
+            return {
+              caseCode: (c.caseCode as string) || '-',
+              campaignName: (campaign.name as string) || (c.segment as string) || 'Kampanya',
+              priority: (c.priority as string) || 'ORTA',
+              status: (c.status as string) || '-',
+              slaHours: 0,
+              remainingHours: (c.slaRemainingHours as number) ?? 0,
+              expert: (c.assignedExpertId as string) ? String(c.assignedExpertId).slice(0, 8) : 'Atanmadı',
+              breached: c.slaStatus === 'BREACHED',
+            };
+          });
+        if (mapped.length > 0) {
+          setSlaCases(mapped);
+          setIsLive(true);
+        }
+      }
+    } catch {
+      // demo veri kalır
+    }
+  };
+
   useEffect(() => {
     loadAiAnalytics();
+    loadOperationalData();
   }, []);
 
   const triggerDemoSimulation = async () => {
@@ -180,6 +278,12 @@ function SupervisorDashboardContent() {
               <Sparkles className="w-4 h-4" />
               <span>{demoSimulating ? 'Simüle Ediliyor...' : 'Canlı Demo Event Fırlat (+2 Bonus SSE)'}</span>
             </button>
+            <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-full border ${isLive ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-slate-500/10 border-slate-500/20'}`}>
+              <span className={`w-2 h-2 rounded-full ${isLive ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}`} />
+              <span className={`text-xs font-bold uppercase tracking-wider ${isLive ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>
+                {isLive ? 'Canlı Backend Verisi' : 'Demo Verisi'}
+              </span>
+            </div>
             <div className="flex items-center space-x-2 px-3 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-full">
               <BarChart3 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
               <span className="text-xs text-purple-700 dark:text-purple-400 font-bold uppercase tracking-wider">Süpervizör Panel</span>
@@ -320,6 +424,61 @@ function SupervisorDashboardContent() {
         {/* AI Accuracy & Benchmark Tab */}
         {activeTab === 'ai_accuracy' && (
           <div className="space-y-6">
+            {/* Canlı AI Doğruluk Metrikleri (gerçek /accuracy endpoint) */}
+            {liveAccuracy && (
+              <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center space-x-2">
+                      <Brain className="w-4 h-4 text-turkcell-blue dark:text-turkcell-yellow" />
+                      <span>Canlı AI Doğruluk Metrikleri (Gerçek Zamanlı)</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 font-medium">
+                      AI Service `/accuracy` uç noktasından canlı çekilen üretim metrikleri · Model: {liveAccuracy.active_model_version}
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                    ● Canlı Veri
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Genel Doğruluk', val: `%${liveAccuracy.accuracy_percentage}`, color: 'text-emerald-600 dark:text-emerald-400' },
+                    { label: 'Toplam Tahmin', val: liveAccuracy.total_predictions, color: 'text-turkcell-blue dark:text-turkcell-yellow' },
+                    { label: 'Yanlış Sınıflama', val: liveAccuracy.misclassified_count, color: 'text-rose-600 dark:text-rose-400' },
+                    { label: 'Düzeltilen (Feedback)', val: liveAccuracy.corrected_predictions_count, color: 'text-purple-600 dark:text-purple-400' },
+                  ].map((m, i) => (
+                    <div key={i} className="p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl">
+                      <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{m.label}</div>
+                      <div className={`text-xl font-black ${m.color}`}>{m.val}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Kategori bazlı doğruluk bar grafiği */}
+                {liveAccuracy.categories.length > 0 && (
+                  <div className="space-y-3 pt-2">
+                    <h4 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">Segment Bazlı Doğruluk Kırılımı</h4>
+                    {liveAccuracy.categories.map((cat) => (
+                      <div key={cat.name} className="space-y-1">
+                        <div className="flex justify-between text-xs font-bold text-slate-900 dark:text-slate-200">
+                          <span>{cat.name}</span>
+                          <span className="text-turkcell-blue dark:text-turkcell-yellow">%{cat.accuracy_pct} ({cat.correct}/{cat.total})</span>
+                        </div>
+                        <div className="h-2.5 bg-slate-100 dark:bg-slate-900 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-700"
+                            style={{ width: `${cat.accuracy_pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
               <div className="flex items-center justify-between">
                 <div>

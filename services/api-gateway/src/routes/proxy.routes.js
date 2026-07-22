@@ -25,9 +25,13 @@ const proxyOptions = (targetUrl) => ({
     console.error(`Proxy Hatası [${targetUrl}]:`, err.message);
     if (!res.headersSent) {
       res.status(503).json({
-        statusCode: 503,
-        message: 'Hedef mikroservis şu anda erişilebilir değil (Service Unavailable)',
-        error: 'Service Unavailable',
+        success: false,
+        data: null,
+        error: {
+          statusCode: 503,
+          message: 'Hedef mikroservis şu anda erişilebilir değil (Service Unavailable)',
+          code: 'Service Unavailable',
+        },
       });
     } else {
       next(err);
@@ -87,6 +91,13 @@ router.use('/api/v1/ai', proxy(AI_SERVICE_URL, {
 }));
 
 // 4. Gamification Service Proxy
+// Case §8.1: kanonik yol '/api/v1/game/**' → Gamification Service
+router.use('/api/v1/game', proxy(GAMIFICATION_SERVICE_URL, {
+  ...proxyOptions(GAMIFICATION_SERVICE_URL),
+  proxyReqPathResolver: (req) => `/api/v1/gamification${req.url}`,
+}));
+
+// Geriye dönük uyumluluk için '/api/v1/gamification/**' alias'ı da korunur.
 router.use('/api/v1/gamification', proxy(GAMIFICATION_SERVICE_URL, {
   ...proxyOptions(GAMIFICATION_SERVICE_URL),
   proxyReqPathResolver: (req) => `/api/v1/gamification${req.url}`,

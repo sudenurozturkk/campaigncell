@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 
-const PUBLIC_PATHS = [
+// Kimlik doğrulaması gerektirmeyen TAM eşleşen yollar.
+const PUBLIC_EXACT = new Set([
   '/',
   '/health',
   '/api/v1/health',
@@ -12,13 +13,27 @@ const PUBLIC_PATHS = [
   '/api/v1/ai/health',
   '/api/v1/ai/benchmark',
   '/api/v1/ai/feature-importance',
-];
+]);
 
+// Kimlik doğrulaması gerektirmeyen ön ek (prefix) yolları (Swagger dokümanları vb.).
+const PUBLIC_PREFIXES = ['/api/docs', '/docs', '/api/v1/events/stream'];
+
+/**
+ * GÜVENLİK: Yalnızca istek YOLU (pathname) üzerinden kontrol edilir; query string
+ * ATLANIR. Aksi halde '/api/v1/campaigns?x=/auth/' gibi bir istek substring eşleşmesiyle
+ * auth'u atlatabilirdi (auth bypass açığı). Eşleşme tam yol veya güvenli prefix iledir.
+ */
 const isPublicPath = (req) => {
-  const p = req.originalUrl || req.path || '';
-  if (p.includes('/auth/')) return true;
-  if (p.includes('/ai/benchmark') || p.includes('/ai/feature-importance') || p.includes('/ai/health')) return true;
-  if (p.startsWith('/api/docs') || p.startsWith('/docs') || p === '/' || p.includes('/health')) return true;
+  let pathname = req.path || '';
+  try {
+    // originalUrl query içerebilir → yalnızca pathname'i al.
+    pathname = new URL(req.originalUrl || req.url || '/', 'http://gw').pathname;
+  } catch (_) {
+    /* req.path fallback */
+  }
+
+  if (PUBLIC_EXACT.has(pathname)) return true;
+  if (PUBLIC_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(prefix + '/'))) return true;
   return false;
 };
 
@@ -30,9 +45,13 @@ const authMiddleware = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({
-      statusCode: 401,
-      message: 'Giriş tokenı bulunamadı. Lütfen Authorization başlığı ekleyin.',
-      error: 'Unauthorized',
+      success: false,
+      data: null,
+      error: {
+        statusCode: 401,
+        message: 'Giriş tokenı bulunamadı. Lütfen Authorization başlığı ekleyin.',
+        code: 'Unauthorized',
+      },
     });
   }
 
@@ -48,10 +67,14 @@ const authMiddleware = (req, res, next) => {
     next();
   } catch (error) {
     return res.status(401).json({
-      statusCode: 401,
-      message: 'Geçersiz veya süresi dolmuş token',
-      error: 'Unauthorized',
-      detail: error.message,
+      success: false,
+      data: null,
+      error: {
+        statusCode: 401,
+        message: 'Geçersiz veya süresi dolmuş token',
+        code: 'Unauthorized',
+        detail: error.message,
+      },
     });
   }
 };

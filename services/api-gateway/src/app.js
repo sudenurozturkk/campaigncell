@@ -27,12 +27,16 @@ app.use(authMiddleware);
 // Proxy rotaları
 app.use('/', proxyRoutes);
 
-// 404 Handler
+// 404 Handler (standart {success, data, error} formatı — Case §8.2)
 app.use((req, res) => {
   res.status(404).json({
-    statusCode: 404,
-    message: `API Gateway: Bulunamayan uç nokta '${req.method} ${req.path}'`,
-    error: 'Not Found',
+    success: false,
+    data: null,
+    error: {
+      statusCode: 404,
+      message: `API Gateway: Bulunamayan uç nokta '${req.method} ${req.path}'`,
+      code: 'Not Found',
+    },
   });
 });
 

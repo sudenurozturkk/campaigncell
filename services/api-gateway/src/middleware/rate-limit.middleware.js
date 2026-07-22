@@ -6,9 +6,13 @@ const rateLimitMiddleware = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: {
-    statusCode: 429,
-    message: 'Çok fazla istek gönderildi. Lütfen bir dakika sonra tekrar deneyin.',
-    error: 'Too Many Requests',
+    success: false,
+    data: null,
+    error: {
+      statusCode: 429,
+      message: 'Çok fazla istek gönderildi. Lütfen bir dakika sonra tekrar deneyin.',
+      code: 'Too Many Requests',
+    },
   },
 });
 

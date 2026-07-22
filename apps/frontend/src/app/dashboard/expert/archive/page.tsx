@@ -1,11 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import DashboardShell from '../../../components/DashboardShell';
 import {
   Archive, Search, Filter, CheckCircle2, Calendar,
   Tag, TrendingUp, Eye, Star, Package, Smartphone, Heart, ArrowUpDown
 } from 'lucide-react';
+
+// Kullanıcıya özel, kimlik doğrulamalı sayfa → statik prerender kapalı (useSearchParams CSR bailout'unu önler).
+export const dynamic = 'force-dynamic';
 
 interface ArchivedCampaign {
   id: string;
@@ -38,6 +41,14 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function ExpertArchivePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 dark:bg-[#050810]" />}>
+      <ExpertArchivePageInner />
+    </Suspense>
+  );
+}
+
+function ExpertArchivePageInner() {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');

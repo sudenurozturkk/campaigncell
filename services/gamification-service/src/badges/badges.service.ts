@@ -52,44 +52,70 @@ export class BadgesService {
     return userBadge;
   }
 
-  async evaluateBadges(expertId: string, totalPoints: number) {
+  /**
+   * Rozet koşullarını Case §6.2'ye birebir uygun değerlendirir.
+   * Koşullar OPTIMIZATION_COMPLETED işlemleri üzerinden hesaplanır (her tamamlama = 1 optimizasyon).
+   */
+  async evaluateBadges(expertId: string, _totalPoints?: number) {
     const transactions = await this.prisma.pointsTransaction.findMany({
       where: { expertId },
     });
 
-    const completedCount = transactions.filter((t) => t.reason === 'OPTIMIZATION_COMPLETED').length;
+    const completed = transactions.filter((t) => t.reason === 'OPTIMIZATION_COMPLETED');
+    const completedCount = completed.length;
     const fastBonusCount = transactions.filter((t) => t.reason === 'FAST_BONUS').length;
     const conversionCount = transactions.filter((t) => t.reason === 'CONVERSION_TARGET_EXCEEDED').length;
 
-    // 1. ILK_KAMPANYA (İlk optimizasyonu tamamlama)
+    // 1. ILK_KAMPANYA — İlk optimizasyonu tamamlama
     if (completedCount >= 1) {
       await this.awardBadge(expertId, 'ILK_KAMPANYA');
     }
 
-    // 2. HIZ_USTASI (2 saatin altında 10 optimizasyon)
-    if (fastBonusCount >= 10 || (completedCount >= 10 && fastBonusCount >= 5)) {
+    // 2. HIZ_USTASI — 2 saatin altında 10 optimizasyon (FAST_BONUS = <2 saat tamamlama)
+    if (fastBonusCount >= 10) {
       await this.awardBadge(expertId, 'HIZ_USTASI');
     }
 
-    // 3. DONUSUM_KRALI (10 kampanyada hedef aşımı)
-    if (conversionCount >= 10 || (completedCount >= 10 && conversionCount >= 3)) {
+    // 3. DONUSUM_KRALI — 10 kampanyada dönüşüm hedefi aşımı
+    if (conversionCount >= 10) {
       await this.awardBadge(expertId, 'DONUSUM_KRALI');
     }
 
-    // 4. MARATONCU (Bir günde 20 optimizasyon)
-    if (completedCount >= 20) {
+    // 4. MARATONCU — Bir günde 20 optimizasyon (takvim gününe göre grupla)
+    if (this.maxCompletionsInSingleDay(completed) >= 20) {
       await this.awardBadge(expertId, 'MARATONCU');
     }
 
-    // 5. CHURN_AVCISI (10 RISKLI_KAYIP vakayı kurtarma)
-    if (completedCount >= 10) {
+    // 5. CHURN_AVCISI — 10 RISKLI_KAYIP vakayı kurtarma (segment bazlı)
+    const churnRescued = completed.filter((t) => t.segment === 'RISKLI_KAYIP').length;
+    if (churnRescued >= 10) {
       await this.awardBadge(expertId, 'CHURN_AVCISI');
     }
 
-    // 6. UZMAN (Tek segmentte 50 optimizasyon)
-    if (completedCount >= 50) {
+    // 6. UZMAN — Tek segmentte 50 optimizasyon
+    if (this.maxCompletionsInSingleSegment(completed) >= 50) {
       await this.awardBadge(expertId, 'UZMAN');
     }
+  }
+
+  /** Aynı takvim günü (UTC) içinde tamamlanan en yüksek optimizasyon sayısı. */
+  private maxCompletionsInSingleDay(completed: { createdAt: Date }[]): number {
+    const byDay = new Map<string, number>();
+    for (const t of completed) {
+      const day = new Date(t.createdAt).toISOString().slice(0, 10);
+      byDay.set(day, (byDay.get(day) || 0) + 1);
+    }
+    return byDay.size ? Math.max(...byDay.values()) : 0;
+  }
+
+  /** Tek bir segmentte tamamlanan en yüksek optimizasyon sayısı. */
+  private maxCompletionsInSingleSegment(completed: { segment: string | null }[]): number {
+    const bySegment = new Map<string, number>();
+    for (const t of completed) {
+      if (!t.segment) continue;
+      bySegment.set(t.segment, (bySegment.get(t.segment) || 0) + 1);
+    }
+    return bySegment.size ? Math.max(...bySegment.values()) : 0;
   }
 
   async getExpertBadges(expertId: string) {

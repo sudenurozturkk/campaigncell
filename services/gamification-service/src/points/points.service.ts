@@ -20,6 +20,7 @@ export class PointsService {
     reason: string,
     caseId?: string,
     eventId?: string,
+    segment?: string,
   ) {
     if (!expertId) {
       this.logger.warn(`Uzman ID geçersiz, puan eklenemedi.`);
@@ -44,6 +45,7 @@ export class PointsService {
         caseId: caseId || null,
         points,
         reason,
+        segment: segment || null,
         eventId: eventId || null,
       },
     });
@@ -81,7 +83,7 @@ export class PointsService {
 
     let currentLevel = 'Bronz';
     let nextLevel: string | null = 'Gümüş';
-    let nextLevelMinPoints: number | null = 50;
+    let nextLevelMinPoints: number | null = 500;
 
     for (let i = 0; i < levels.length; i++) {
       const lvl = levels[i];

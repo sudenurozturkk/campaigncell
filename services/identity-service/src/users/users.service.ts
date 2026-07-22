@@ -127,4 +127,27 @@ export class UsersService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  /**
+   * Servis-içi (internal) uzman listesi — AI Service akıllı atama için kullanır.
+   * Yalnızca hassas olmayan alanlar döner (şifre/token yok).
+   */
+  async findExpertsForAssignment() {
+    const experts = await this.prisma.user.findMany({
+      where: { role: RoleEnum.CAMPAIGN_EXPERT, isLocked: false },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        expertiseTags: true,
+        region: true,
+      },
+    });
+    return experts.map((e) => ({
+      id: e.id,
+      name: `${e.firstName} ${e.lastName}`,
+      expertise_tags: e.expertiseTags ?? [],
+      region: e.region,
+    }));
+  }
 }

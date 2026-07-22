@@ -35,6 +35,35 @@ AI Service, Turkcell abonelerinin kullanım alışkanlıklarını analiz ederek 
 
 ```env
 PORT=8000
-DATABASE_URL=postgresql://campaigncell_user:campaigncell_secret_2026@ai-db:5432/ai_db
+DATABASE_URL=postgresql://postgres:postgres@ai-db:5432/ai
 RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672
+IDENTITY_SERVICE_URL=http://identity-service:3001
 ```
+
+> `IDENTITY_SERVICE_URL`, akıllı uzman ataması için Identity Service'in `/internal/experts`
+> uç noktasından gerçek uzman listesini (isim, uzmanlık etiketleri, bölge) çekmek üzere kullanılır.
+> Identity erişilemezse yedek uzman roster'ına düşülür (servis bağımsızlığı).
+
+## 📊 Eğitim Verisi ve Model Eğitim Süreci
+
+Eğitim verisi repoda paylaşılmıştır: [`data/training_dataset.csv`](./data/training_dataset.csv)
+(1.200 satır, her satır Türkçe abone profili açıklaması içerir).
+
+**Veri üretimi (yeniden oluşturma):**
+
+```bash
+python -m app.ml.dataset_generator
+# → services/ai-service/data/training_dataset.csv
+```
+
+**Özellikler (features):** `monthly_data_usage_gb`, `monthly_voice_min`, `monthly_spend_try`,
+`tenure_months`, `past_accepted_count`, `past_rejected_count`, `complaint_count`,
+`data_usage_trend_pct`. **Hedefler:** `target_segment`, `target_priority`, `is_converted`.
+
+**Eğitim akışı:**
+1. `dataset_generator.py` gerçekçi telko dağılımlarıyla sentetik veri üretir (deterministik `seed=42`).
+2. `predictor.py` içindeki `PredictorEngine`, veriyi `StandardScaler` ile ölçekler ve
+   `RandomForest` / `GradientBoosting` modellerini 5-fold cross-validation ile eğitir.
+3. En iyi model aktif üretim modeli olarak versiyonlanır (`ModelVersion`).
+4. `POST /api/v1/ai/train` ile çalışma zamanında yeniden eğitim tetiklenebilir;
+   `GET /api/v1/ai/benchmark` model karşılaştırmasını, `GET /api/v1/ai/accuracy` canlı doğruluğu döner.

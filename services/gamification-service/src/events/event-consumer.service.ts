@@ -15,6 +15,15 @@ export class EventConsumerService implements OnModuleInit {
     this.rabbitmq.registerMessageHandler(this.handleIncomingEvent.bind(this));
   }
 
+  /** İki ISO zaman damgası arasındaki saat farkı; eksik/geçersizse null döner. */
+  private calcDurationHours(createdAt?: string, completedAt?: string): number | null {
+    if (!createdAt || !completedAt) return null;
+    const start = new Date(createdAt).getTime();
+    const end = new Date(completedAt).getTime();
+    if (isNaN(start) || isNaN(end) || end < start) return null;
+    return (end - start) / 3600000;
+  }
+
   async handleIncomingEvent(routingKey: string, data: any) {
     const eventId = data.event_id;
     const payload = data.payload || {};
@@ -24,10 +33,13 @@ export class EventConsumerService implements OnModuleInit {
     if (routingKey === 'campaign.optimized') {
       const expertId = payload.expert_id;
       const caseId = payload.case_id;
+      const segment = payload.segment;
       const slaMet = payload.sla_met;
       const isKritik = payload.priority === 'KRITIK';
       const conversionTargetExceeded = payload.target_exceeded || payload.conversion_lift > 0.15;
-      const durationHours = payload.duration_hours || 1.5;
+
+      // Süre created_at → completed_at farkından hesaplanır (Case §6.1: 2 saatten kısa bonus).
+      const durationHours = this.calcDurationHours(payload.created_at, payload.completed_at);
 
       if (expertId) {
         // 1. Optimizasyon tamamlandı (+10)
@@ -37,16 +49,18 @@ export class EventConsumerService implements OnModuleInit {
           'OPTIMIZATION_COMPLETED',
           caseId,
           eventId ? `${eventId}-opt` : undefined,
+          segment,
         );
 
         // 2. Hızlı optimizasyon bonusu (2 saatten kısa) (+5)
-        if (durationHours < 2) {
+        if (durationHours !== null && durationHours < 2) {
           await this.pointsService.addPoints(
             expertId,
             5,
             'FAST_BONUS',
             caseId,
             eventId ? `${eventId}-fast` : undefined,
+            segment,
           );
         }
 
@@ -58,6 +72,7 @@ export class EventConsumerService implements OnModuleInit {
             'CONVERSION_TARGET_EXCEEDED',
             caseId,
             eventId ? `${eventId}-conv` : undefined,
+            segment,
           );
         }
 
@@ -69,6 +84,7 @@ export class EventConsumerService implements OnModuleInit {
             'KRITIK_SLA_COMPLETED',
             caseId,
             eventId ? `${eventId}-kritik` : undefined,
+            segment,
           );
         }
       }

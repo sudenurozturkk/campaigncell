@@ -19,7 +19,8 @@ model PointsTransaction {
   caseId    String?  @map("case_id") @db.Uuid
   points    Int
   reason    String   @db.VarChar(50)
-  eventId   String?  @unique @map("event_id") @db.Uuid
+  segment   String?  @db.VarChar(30)
+  eventId   String?  @unique @map("event_id") @db.VarChar(80)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
 
   @@map("points_transactions")

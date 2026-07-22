@@ -1,12 +1,15 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import DashboardShell from '../../../components/DashboardShell';
 import {
   User, Phone, Mail, MapPin, Calendar, Wifi, PhoneCall,
   CreditCard, TrendingUp, Shield, Star, BarChart3, Zap,
   Package, Clock, Award
 } from 'lucide-react';
+
+// Kullanıcıya özel, kimlik doğrulamalı sayfa → statik prerender kapalı (useSearchParams CSR bailout'unu önler).
+export const dynamic = 'force-dynamic';
 
 function StatCard({ icon: Icon, label, value, sub, color }: {
   icon: React.ElementType; label: string; value: string; sub?: string; color: string;
@@ -42,6 +45,14 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
 }
 
 export default function SubscriberProfilePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 dark:bg-[#050810]" />}>
+      <SubscriberProfilePageInner />
+    </Suspense>
+  );
+}
+
+function SubscriberProfilePageInner() {
   const profile = {
     name: 'Ahmet Yılmaz',
     gsm: '0555 111 22 33',

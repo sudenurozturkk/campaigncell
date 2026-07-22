@@ -1,66 +1,135 @@
-from typing import Dict, Any, List
+import os
+import hashlib
+import logging
+from typing import Dict, Any, List, Optional
 
-# Simüle Edilmiş Kampanya Uzmanları Listesi (Identity Service ile senkronize veriler)
-MOCK_EXPERTS = [
-    {
-        "id": "a7f30000-0000-0000-0000-000000000001",
-        "name": "Ahmet Yılmaz (Kampanya Uzmanı)",
-        "expertise_tags": ["CHURN_PREVENTION", "RISKLI_KAYIP", "DEVICE_UPSELL"],
-        "active_workload": 3,
-        "performance_rating": 0.92,
-    },
-    {
-        "id": "a7f30000-0000-0000-0000-000000000002",
-        "name": "Ayşe Kaya (Segment Uzmanı)",
-        "expertise_tags": ["YUKSEK_DEGER", "TARIFE_YUKSELTME", "SADAKAT"],
-        "active_workload": 1,
-        "performance_rating": 0.88,
-    },
-    {
-        "id": "a7f30000-0000-0000-0000-000000000003",
-        "name": "Mehmet Demir (Genel Kampanya Uzmanı)",
-        "expertise_tags": ["YENI_ABONE", "EK_PAKET", "PASIF"],
-        "active_workload": 5,
-        "performance_rating": 0.82,
-    },
+import requests
+
+logger = logging.getLogger("AIExpertMatcher")
+
+# Case §5.3: uzman başına maksimum aktif vaka kapasitesi
+MAX_CAPACITY = 10
+
+IDENTITY_URL = os.getenv("IDENTITY_SERVICE_URL", "http://identity-service:3001")
+
+# Identity Service erişilemezse kullanılacak yedek roster (gerçek seed uzmanları temsilen).
+_FALLBACK_EXPERTS = [
+    {"id": "a7f30000-0000-0000-0000-000000000001", "name": "Yedek Uzman 1",
+     "expertise_tags": ["CHURN_PREVENTION", "RISKLI_KAYIP", "Churn Önleme"]},
+    {"id": "a7f30000-0000-0000-0000-000000000002", "name": "Yedek Uzman 2",
+     "expertise_tags": ["YUKSEK_DEGER", "TARIFE_YUKSELTME", "SADAKAT"]},
+    {"id": "a7f30000-0000-0000-0000-000000000003", "name": "Yedek Uzman 3",
+     "expertise_tags": ["YENI_ABONE", "EK_PAKET", "PASIF"]},
 ]
 
-def find_best_expert_for_case(target_segment: str, campaign_type: str = "EK_PAKET") -> Dict[str, Any]:
+# Segment ↔ uzmanlık etiketi eşanlamlıları (Türkçe/İngilizce normalizasyon)
+_SEGMENT_SYNONYMS = {
+    "RISKLI_KAYIP": {"RISKLI_KAYIP", "CHURN_PREVENTION", "CHURN", "CHURN ÖNLEME", "CHURN ONLEME"},
+    "YUKSEK_DEGER": {"YUKSEK_DEGER", "YÜKSEK DEĞER", "SADAKAT", "TARIFE_YUKSELTME", "TARİFE YÜKSELTME"},
+    "YENI_ABONE": {"YENI_ABONE", "YENİ ABONE", "EK_PAKET", "EK PAKET"},
+    "PASIF": {"PASIF", "PASİF"},
+}
+
+
+def _normalize(tag: str) -> str:
+    return (tag or "").strip().upper()
+
+
+def fetch_experts() -> List[Dict[str, Any]]:
+    """Uzman listesini Identity Service'ten (gerçek veriden) çeker; erişilemezse yedek roster'a düşer."""
+    try:
+        resp = requests.get(f"{IDENTITY_URL}/internal/experts", timeout=4)
+        if resp.status_code == 200:
+            data = resp.json().get("data", [])
+            if data:
+                return data
+        logger.warning(f"Identity /internal/experts beklenmeyen yanıt: {resp.status_code}")
+    except Exception as e:
+        logger.warning(f"Identity Service erişilemedi, yedek uzman roster kullanılıyor: {e}")
+    return _FALLBACK_EXPERTS
+
+
+def _stable_performance(expert_id: str) -> float:
     """
-    Optimizasyon vakası için en uygun uzmanı ve atama skorunu hesaplar.
-    Formül: assignment_score = (expertise_match * 0.5) + (availability * 0.3) + (performance * 0.2)
+    Uzmanın ortalama dönüşüm artışı (performans) proxy'si.
+    Not: Gerçek performans Campaign DB'de tutulur (conversion_lift). Servis bağımsızlığı gereği
+    burada uzman id'sine bağlı deterministik, 0.70–0.95 arası stabil bir değer kullanılır.
     """
+    h = int(hashlib.sha256(expert_id.encode()).hexdigest(), 16) % 26
+    return round(0.70 + h / 100.0, 3)
+
+
+def _expertise_match(expert_tags: List[str], target_segment: str, campaign_type: str) -> int:
+    """Case §5.3: eşleşiyorsa 1, değilse 0."""
+    normalized = {_normalize(t) for t in (expert_tags or [])}
+    synonyms = {_normalize(s) for s in _SEGMENT_SYNONYMS.get(target_segment, {target_segment})}
+    if normalized & synonyms:
+        return 1
+    if _normalize(campaign_type) in normalized:
+        return 1
+    return 0
+
+
+def find_best_expert_for_case(
+    target_segment: str,
+    campaign_type: str = "EK_PAKET",
+    workloads: Optional[Dict[str, int]] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Optimizasyon vakası için en uygun uzmanı seçer (Case §5.3).
+
+    skor = (uzmanlik_eslesme × 0.5) + (bosluk_orani × 0.3) + (performans × 0.2)
+      - uzmanlik_eslesme : eşleşme 1, değilse 0
+      - bosluk_orani     : 1 - (aktif_vaka / MAX_CAPACITY=10)
+      - performans       : uzmanın ortalama dönüşüm artışı proxy'si
+
+    Kapasitesi dolu (aktif_vaka >= 10) uzmanlar atlanır. Uygun uzman yoksa vaka kuyruğa alınır (queued=True).
+    """
+    workloads = workloads or {}
+    experts = fetch_experts()
+
     best_expert = None
     max_score = -1.0
+    all_full = True
 
-    for expert in MOCK_EXPERTS:
-        # 1. Uzmanlık Eşleşmesi (0.0 - 1.0)
-        tags = expert["expertise_tags"]
-        expertise_match = 0.5
-        if target_segment in tags:
-            expertise_match += 0.35
-        if campaign_type in tags:
-            expertise_match += 0.15
-        expertise_match = min(expertise_match, 1.0)
+    for expert in experts:
+        expert_id = expert["id"]
+        workload = int(workloads.get(expert_id, expert.get("active_workload", 0)))
 
-        # 2. Müsaitlik (Availability) (0.0 - 1.0) -> Az iş yükü = Yüksek puan
-        workload = expert["active_workload"]
-        availability = max(1.0 - (workload * 0.15), 0.1)
+        # Kapasite kontrolü — doluysa atla (kuyruğa alınacak)
+        if workload >= MAX_CAPACITY:
+            continue
+        all_full = False
 
-        # 3. Geçmiş Performans (0.0 - 1.0)
-        performance = expert["performance_rating"]
+        uzmanlik_eslesme = _expertise_match(expert.get("expertise_tags", []), target_segment, campaign_type)
+        bosluk_orani = max(0.0, 1.0 - (workload / MAX_CAPACITY))
+        performans = float(expert.get("performance_rating", _stable_performance(expert_id)))
 
-        # Toplam Atama Skoru
-        score = (expertise_match * 0.5) + (availability * 0.3) + (performance * 0.2)
-        score = round(min(score, 0.99), 3)
+        score = (uzmanlik_eslesme * 0.5) + (bosluk_orani * 0.3) + (performans * 0.2)
+        score = round(score, 3)
 
         if score > max_score:
             max_score = score
             best_expert = {
-                "expert_id": expert["id"],
-                "expert_name": expert["name"],
+                "expert_id": expert_id,
+                "expert_name": expert.get("name", "Uzman"),
                 "assignment_score": score,
-                "reasoning": f"Uzmanlık uyumu (%{int(expertise_match*100)}), düşük iş yükü ({workload} aktif vaka) ve yüksek performans skoru ({int(performance*100)}) nedeniyle önerilmiştir.",
+                "reasoning": (
+                    f"Uzmanlık eşleşmesi={uzmanlik_eslesme} (×0.5), "
+                    f"boşluk oranı={round(bosluk_orani, 2)} (×0.3, {workload}/{MAX_CAPACITY} aktif vaka), "
+                    f"performans={performans} (×0.2) → atama skoru {score}."
+                ),
+                "queued": False,
             }
+
+    if best_expert is None:
+        # Tüm uzmanlar kapasite dolu → kuyruğa al (Case §5.3)
+        return {
+            "expert_id": None,
+            "expert_name": None,
+            "assignment_score": 0.0,
+            "reasoning": "Tüm uzmanlar maksimum kapasitede (10 aktif vaka). Vaka atama kuyruğuna alındı.",
+            "queued": True,
+        } if all_full and experts else None
 
     return best_expert

@@ -3,13 +3,36 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from datetime import datetime, timezone
+
 from app.database import engine, Base, SessionLocal
 from app.api.endpoints import router as ai_router
 from app.events.rabbitmq import RabbitMQManager
 from app.models import Prediction, PredictionCorrection, SubscriberProfile
+from app.ml.predictor import PredictorEngine
+from app.ml.expert_matcher import find_best_expert_for_case
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("AIServiceMain")
+
+
+def _profile_hint_for_segment(segment: str) -> dict:
+    """Kampanya hedef segmentine göre temsili abone profili (async skorlama için)."""
+    hints = {
+        "RISKLI_KAYIP": {"monthly_data_usage_gb": 2, "monthly_voice_min": 90, "monthly_spend_try": 80,
+                          "tenure_months": 30, "past_accepted_count": 0, "past_rejected_count": 3,
+                          "complaint_count": 4, "data_usage_trend_pct": -40},
+        "YUKSEK_DEGER": {"monthly_data_usage_gb": 45, "monthly_voice_min": 1500, "monthly_spend_try": 600,
+                          "tenure_months": 48, "past_accepted_count": 5, "past_rejected_count": 0,
+                          "complaint_count": 0, "data_usage_trend_pct": 20},
+        "YENI_ABONE": {"monthly_data_usage_gb": 12, "monthly_voice_min": 400, "monthly_spend_try": 200,
+                        "tenure_months": 2, "past_accepted_count": 0, "past_rejected_count": 0,
+                        "complaint_count": 0, "data_usage_trend_pct": 5},
+        "PASIF": {"monthly_data_usage_gb": 3, "monthly_voice_min": 150, "monthly_spend_try": 90,
+                   "tenure_months": 20, "past_accepted_count": 1, "past_rejected_count": 2,
+                   "complaint_count": 1, "data_usage_trend_pct": -12},
+    }
+    return hints.get(segment, {})
 
 def handle_rabbitmq_event(routing_key: str, data: dict):
     """
@@ -20,7 +43,34 @@ def handle_rabbitmq_event(routing_key: str, data: dict):
     db = SessionLocal()
 
     try:
-        if routing_key == "segment.changed":
+        if routing_key == "campaign.created":
+            # EVENTS.md: kampanya oluşturulunca AI otomatik skorlama yapar (async yol / recovery senaryosu).
+            case_id = payload.get("case_id")
+            campaign_id = payload.get("campaign_id")
+            target_segment = payload.get("target_segment")
+            campaign_type = payload.get("type")
+            if case_id:
+                engine = PredictorEngine()
+                features = _profile_hint_for_segment(target_segment or "")
+                result = engine.predict(features, campaign_type=campaign_type)
+                # Segment yalnızca BELIRSIZ ise AI tarafından atanır; belirli segmentte kullanıcı seçimi korunur.
+                pub_segment = result['predicted_segment'] if (not target_segment or target_segment == "BELIRSIZ") else None
+                best = find_best_expert_for_case(result['predicted_segment'], campaign_type or "EK_PAKET")
+                rabbitmq = RabbitMQManager()
+                rabbitmq.publish_event("ai.prediction.created", {
+                    "campaign_id": campaign_id,
+                    "case_id": case_id,
+                    "recommendation_score": result['recommendation_score'],
+                    "conversion_probability": result['conversion_probability'],
+                    "predicted_segment": pub_segment,
+                    "predicted_priority": result['predicted_priority'],
+                    "reasoning": result['reasoning'],
+                    "recommended_expert_id": best.get("expert_id") if best else None,
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                })
+                logger.info(f"campaign.created işlendi → ai.prediction.created yayınlandı (case: {case_id}).")
+
+        elif routing_key == "segment.changed":
             case_id = payload.get("case_id")
             original_segment = payload.get("original_segment")
             corrected_segment = payload.get("corrected_segment")

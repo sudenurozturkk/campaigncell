@@ -179,7 +179,17 @@ class PredictorEngine:
 
         return f"AI Analizi: [{segment}] segmenti ve [{priority}] önceliği belirlenmiştir. Gerekçe: {reason_text}. Tahmini dönüşüm olasılığı: %{int(conv_prob * 100)}."
 
-    def predict(self, features: Dict[str, Any]) -> Dict[str, Any]:
+    # Kampanya tipine göre öneri skoru modülasyonu (segment-tipi uyumu → her kampanya için farklı skor)
+    CAMPAIGN_TYPE_AFFINITY = {
+        ('YUKSEK_DEGER', 'TARIFE_YUKSELTME'): 0.08,
+        ('YUKSEK_DEGER', 'SADAKAT'): 0.05,
+        ('RISKLI_KAYIP', 'CIHAZ_FIRSATI'): 0.07,
+        ('RISKLI_KAYIP', 'SADAKAT'): 0.06,
+        ('YENI_ABONE', 'EK_PAKET'): 0.06,
+        ('PASIF', 'EK_PAKET'): 0.04,
+    }
+
+    def predict(self, features: Dict[str, Any], campaign_type: str = None) -> Dict[str, Any]:
         input_data = pd.DataFrame([{
             'monthly_data_usage_gb': float(features.get('monthly_data_usage_gb', 10.0)),
             'monthly_voice_min': float(features.get('monthly_voice_min', 500.0)),
@@ -220,6 +230,10 @@ class PredictorEngine:
 
         accepted = features.get('past_accepted_count', 1)
         rec_score = float(np.clip((conv_prob * 0.7) + (accepted * 0.05) + 0.15, 0.1, 0.99))
+        # Kampanya tipi–segment uyumu skoru etkiler (her kampanya için ayrı öneri skoru — Case §5.1)
+        if campaign_type:
+            affinity = self.CAMPAIGN_TYPE_AFFINITY.get((segment, campaign_type), -0.03)
+            rec_score = float(np.clip(rec_score + affinity, 0.1, 0.99))
         conv_prob = float(np.clip(conv_prob, 0.05, 0.95))
 
         reasoning = self.generate_reasoning(features, segment, priority, rec_score, conv_prob)

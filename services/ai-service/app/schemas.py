@@ -30,10 +30,11 @@ class RecommendRequest(BaseModel):
     profile_override: Optional[SubscriberProfileBase] = None
 
 class ExpertScoreInfo(BaseModel):
-    expert_id: str
-    expert_name: str
+    expert_id: Optional[str] = None
+    expert_name: Optional[str] = None
     assignment_score: float
     reasoning: str
+    queued: bool = False
 
 class RecommendResponse(BaseModel):
     prediction_id: str
@@ -45,6 +46,9 @@ class RecommendResponse(BaseModel):
     predicted_segment: str = Field(description="YUKSEK_DEGER, RISKLI_KAYIP, YENI_ABONE, PASIF, BELIRSIZ")
     predicted_priority: str = Field(description="DUSUK, ORTA, YUKSEK, KRITIK")
     reasoning: str = Field(description="Açıklanabilir AI gerekçesi")
+    # Case §5.1 eşikleri
+    show_to_subscriber: bool = Field(description="Skor >= 0.60 ise abone teklifi görür")
+    priority_display: bool = Field(description="Skor > 0.80 ise teklif öncelikli gösterilir")
     recommended_expert: Optional[ExpertScoreInfo] = None
     model_version: str
 

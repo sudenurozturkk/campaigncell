@@ -120,10 +120,13 @@ class CampaignCellApiClient {
   // ===== CAMPAIGN SERVICE =====
   async getCases(): Promise<ApiCase[]> {
     try {
-      const res = await fetch(`${this.gatewayUrl}/api/v1/campaigns/cases`, {
+      const res = await fetch(`${this.gatewayUrl}/api/v1/cases?limit=50`, {
         headers: this.getHeaders(),
       });
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const data = await res.json();
+        return Array.isArray(data) ? data : data.items || [];
+      }
     } catch {
       // Fallback
     }
@@ -155,10 +158,10 @@ class CampaignCellApiClient {
 
   async transitionCaseStatus(caseId: string, targetStatus: string, note?: string) {
     try {
-      const res = await fetch(`${this.gatewayUrl}/api/v1/campaigns/cases/${caseId}/transition`, {
+      const res = await fetch(`${this.gatewayUrl}/api/v1/cases/${caseId}/status`, {
         method: 'PATCH',
         headers: this.getHeaders(),
-        body: JSON.stringify({ targetStatus, note }),
+        body: JSON.stringify({ status: targetStatus, note }),
       });
       if (res.ok) return await res.json();
       if (res.status === 422) {
@@ -172,10 +175,10 @@ class CampaignCellApiClient {
 
   async overrideSegment(caseId: string, newSegment: string, reason: string) {
     try {
-      const res = await fetch(`${this.gatewayUrl}/api/v1/campaigns/cases/${caseId}/override-segment`, {
+      const res = await fetch(`${this.gatewayUrl}/api/v1/cases/${caseId}/segment`, {
         method: 'PATCH',
         headers: this.getHeaders(),
-        body: JSON.stringify({ newSegment, reason }),
+        body: JSON.stringify({ segment: newSegment, reason }),
       });
       if (res.ok) return await res.json();
     } catch {
@@ -184,13 +187,24 @@ class CampaignCellApiClient {
     return { success: true, isAiMisclassified: true };
   }
 
-  // ===== GAMIFICATION SERVICE =====
+  // ===== GAMIFICATION SERVICE (Case §8.1: /api/v1/game) =====
   async getLeaderboard(): Promise<ApiLeaderboard[]> {
     try {
-      const res = await fetch(`${this.gatewayUrl}/api/v1/gamification/leaderboard`, {
+      const res = await fetch(`${this.gatewayUrl}/api/v1/game/leaderboard?period=ALL_TIME`, {
         headers: this.getHeaders(),
       });
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const data = await res.json();
+        const rows = Array.isArray(data) ? data : data.leaderboard || [];
+        return rows.map((r: Record<string, unknown>, i: number) => ({
+          rank: (r.rank as number) ?? i + 1,
+          expertId: (r.expertId as string) || '',
+          name: (r.name as string) || `Uzman ${String(r.expertId || '').slice(0, 8)}`,
+          level: (r.level as string) || 'Bronz',
+          points: (r.totalPoints as number) ?? (r.points as number) ?? 0,
+          badges: (r.badges as string[]) || [],
+        }));
+      }
     } catch {
       // Fallback
     }
@@ -203,10 +217,25 @@ class CampaignCellApiClient {
   // ===== AI SERVICE =====
   async getAiMetrics(): Promise<ApiAiMetrics> {
     try {
-      const res = await fetch(`${this.gatewayUrl}/api/v1/ai/metrics`, {
+      const res = await fetch(`${this.gatewayUrl}/api/v1/ai/accuracy`, {
         headers: this.getHeaders(),
       });
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const d = await res.json();
+        const cb = d.category_breakdown || {};
+        return {
+          accuracy: d.accuracy_percentage ?? 0,
+          totalPredictions: d.total_predictions ?? 0,
+          misclassifications: d.misclassified_count ?? 0,
+          f1Score: 0,
+          categories: Object.keys(cb).map((k) => ({
+            name: k,
+            accuracy: cb[k].accuracy_pct ?? 0,
+            correct: cb[k].correct ?? 0,
+            total: cb[k].total ?? 0,
+          })),
+        };
+      }
     } catch {
       // Fallback
     }
