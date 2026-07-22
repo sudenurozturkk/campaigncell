@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import DashboardShell from '../../components/DashboardShell';
 import {
   BarChart3, Cpu, Award, Trophy, Activity,
@@ -78,21 +79,22 @@ const INITIAL_FEATURES: FeatureImportance[] = [
   { feature: 'tenure_months', label: 'Abonelik Süresi (Ay)', importance_weight: 0.0216, percentage: 2.16 },
 ];
 
-export default function SupervisorDashboard() {
+function SupervisorDashboardContent() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+
   const [activeTab, setActiveTab] = useState<'overview' | 'leaderboard' | 'ai_accuracy' | 'sla'>('overview');
   const [benchmarkData, setBenchmarkData] = useState<BenchmarkResult[]>(INITIAL_BENCHMARK);
   const [featuresData, setFeaturesData] = useState<FeatureImportance[]>(INITIAL_FEATURES);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [demoSimulating, setDemoSimulating] = useState(false);
 
-  // Sync tab with URL parameter
+  // Sync tab with URL parameter using Next.js App Router hooks
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tabParam = params.get('tab');
     if (tabParam && ['overview', 'leaderboard', 'ai_accuracy', 'sla'].includes(tabParam)) {
       setActiveTab(tabParam as typeof activeTab);
     }
-  }, []);
+  }, [tabParam]);
 
   const leaderboard: LeaderboardEntry[] = [
     { rank: 1, name: 'Ahmet Yılmaz', level: 'Platin', points: 3450, badges: ['ILK_KAMPANYA', 'HIZ_USTASI', 'DONUSUM_KRALI', 'CHURN_AVCISI'], completedCases: 48, avgSlaHours: 1.4, isCurrentUser: true },
@@ -438,5 +440,17 @@ export default function SupervisorDashboard() {
         )}
       </div>
     </DashboardShell>
+  );
+}
+
+export default function SupervisorDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 dark:bg-[#050810] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-turkcell-blue animate-spin"></div>
+      </div>
+    }>
+      <SupervisorDashboardContent />
+    </Suspense>
   );
 }
