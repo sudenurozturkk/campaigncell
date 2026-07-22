@@ -27,7 +27,6 @@ class RecommendRequest(BaseModel):
     campaign_id: Optional[str] = None
     case_id: Optional[str] = None
     campaign_type: Optional[str] = "EK_PAKET"
-    # Profil güncel değilse override gönderilebilir
     profile_override: Optional[SubscriberProfileBase] = None
 
 class ExpertScoreInfo(BaseModel):
@@ -62,9 +61,15 @@ class TrainModelResponse(BaseModel):
     f1_score: float
     message: str
 
+class CategoryAccuracyInfo(BaseModel):
+    total: int
+    correct: int
+    accuracy_pct: float
+
 class AccuracyResponse(BaseModel):
     total_predictions: int
     misclassified_count: int
     corrected_predictions_count: int
     accuracy_percentage: float
     active_model_version: Optional[str] = None
+    category_breakdown: Optional[Dict[str, CategoryAccuracyInfo]] = None

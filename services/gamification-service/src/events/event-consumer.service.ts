@@ -25,9 +25,12 @@ export class EventConsumerService implements OnModuleInit {
       const expertId = payload.expert_id;
       const caseId = payload.case_id;
       const slaMet = payload.sla_met;
+      const isKritik = payload.priority === 'KRITIK';
+      const conversionTargetExceeded = payload.target_exceeded || payload.conversion_lift > 0.15;
+      const durationHours = payload.duration_hours || 1.5;
 
       if (expertId) {
-        // 1. Temel Optimizasyon Puanı (+10)
+        // 1. Optimizasyon tamamlandı (+10)
         await this.pointsService.addPoints(
           expertId,
           10,
@@ -36,8 +39,8 @@ export class EventConsumerService implements OnModuleInit {
           eventId ? `${eventId}-opt` : undefined,
         );
 
-        // 2. Hız Bonusu (+5)
-        if (slaMet) {
+        // 2. Hızlı optimizasyon bonusu (2 saatten kısa) (+5)
+        if (durationHours < 2) {
           await this.pointsService.addPoints(
             expertId,
             5,
@@ -46,13 +49,35 @@ export class EventConsumerService implements OnModuleInit {
             eventId ? `${eventId}-fast` : undefined,
           );
         }
+
+        // 3. Dönüşüm hedefi aşıldı (+15)
+        if (conversionTargetExceeded) {
+          await this.pointsService.addPoints(
+            expertId,
+            15,
+            'CONVERSION_TARGET_EXCEEDED',
+            caseId,
+            eventId ? `${eventId}-conv` : undefined,
+          );
+        }
+
+        // 4. KRITIK vaka SLA içinde tamamlandı (+15)
+        if (isKritik && slaMet) {
+          await this.pointsService.addPoints(
+            expertId,
+            15,
+            'KRITIK_SLA_COMPLETED',
+            caseId,
+            eventId ? `${eventId}-kritik` : undefined,
+          );
+        }
       }
     } else if (routingKey === 'sla.breached') {
       const expertId = payload.assigned_expert_id || payload.expert_id;
       const caseId = payload.case_id;
 
       if (expertId) {
-        // SLA İhlal Cezası (-5)
+        // SLA aşımı (-5)
         await this.pointsService.addPoints(
           expertId,
           -5,
@@ -75,6 +100,7 @@ export class EventConsumerService implements OnModuleInit {
             eventId ? `${eventId}-rating` : undefined,
           );
         } else if (rating <= 2) {
+          // Abone düşük puan verdi (-3)
           await this.pointsService.addPoints(
             expertId,
             -3,

@@ -17,10 +17,10 @@ describe('PointsService (Idempotency & Level Calculation)', () => {
     },
     level: {
       findMany: jest.fn().mockResolvedValue([
-        { id: 1, name: 'Bronz', minPoints: 0, maxPoints: 49 },
-        { id: 2, name: 'Gümüş', minPoints: 50, maxPoints: 149 },
-        { id: 3, name: 'Altın', minPoints: 150, maxPoints: 299 },
-        { id: 4, name: 'Platin', minPoints: 300, maxPoints: null },
+        { id: 1, name: 'Bronz', minPoints: 0, maxPoints: 499 },
+        { id: 2, name: 'Gümüş', minPoints: 500, maxPoints: 1499 },
+        { id: 3, name: 'Altın', minPoints: 1500, maxPoints: 2999 },
+        { id: 4, name: 'Platin', minPoints: 3000, maxPoints: null },
       ]),
     },
   };
@@ -53,16 +53,16 @@ describe('PointsService (Idempotency & Level Calculation)', () => {
     expect(service).toBeDefined();
   });
 
-  it('should calculate correct level based on total points', async () => {
-    const lvl1 = await service.determineLevel(25);
+  it('should calculate correct level based on total points (Case §6.3)', async () => {
+    const lvl1 = await service.determineLevel(250);
     expect(lvl1.currentLevel).toBe('Bronz');
     expect(lvl1.nextLevel).toBe('Gümüş');
 
-    const lvl2 = await service.determineLevel(75);
+    const lvl2 = await service.determineLevel(750);
     expect(lvl2.currentLevel).toBe('Gümüş');
     expect(lvl2.nextLevel).toBe('Altın');
 
-    const lvl3 = await service.determineLevel(350);
+    const lvl3 = await service.determineLevel(3500);
     expect(lvl3.currentLevel).toBe('Platin');
     expect(lvl3.nextLevel).toBeNull();
   });

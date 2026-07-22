@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, UnprocessableEntityException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service.js';
 import { AssignExpertDto } from './dto/assign-expert.dto.js';
@@ -155,8 +155,8 @@ export class CasesService {
     // State Machine Geçiş Doğrulaması
     const allowed = this.validTransitions[currentStatus] || [];
     if (!allowed.includes(targetStatus)) {
-      throw new BadRequestException(
-        `Geçersiz durum geçişi: '${currentStatus}' durumundan '${targetStatus}' durumuna geçilemez. (İzin verilenler: ${allowed.join(', ') || 'Yok'})`,
+      throw new UnprocessableEntityException(
+        `Geçersiz durum geçişi (HTTP 422): '${currentStatus}' durumundan '${targetStatus}' durumuna geçilemez. (İzin verilenler: ${allowed.join(', ') || 'Yok'})`,
       );
     }
 

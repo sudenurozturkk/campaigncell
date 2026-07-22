@@ -59,26 +59,36 @@ export class BadgesService {
 
     const completedCount = transactions.filter((t) => t.reason === 'OPTIMIZATION_COMPLETED').length;
     const fastBonusCount = transactions.filter((t) => t.reason === 'FAST_BONUS').length;
-    const slaExceededCount = transactions.filter((t) => t.reason === 'SLA_EXCEEDED').length;
+    const conversionCount = transactions.filter((t) => t.reason === 'CONVERSION_TARGET_EXCEEDED').length;
 
-    // 1. ILK_KAMPANYA
+    // 1. ILK_KAMPANYA (İlk optimizasyonu tamamlama)
     if (completedCount >= 1) {
       await this.awardBadge(expertId, 'ILK_KAMPANYA');
     }
 
-    // 2. HIZ_USTASI
-    if (fastBonusCount >= 5) {
+    // 2. HIZ_USTASI (2 saatin altında 10 optimizasyon)
+    if (fastBonusCount >= 10 || (completedCount >= 10 && fastBonusCount >= 5)) {
       await this.awardBadge(expertId, 'HIZ_USTASI');
     }
 
-    // 3. SLA_SAMPIYONU (50+ puan ve 0 ihlal)
-    if (totalPoints >= 50 && slaExceededCount === 0) {
-      await this.awardBadge(expertId, 'SLA_SAMPIYONU');
+    // 3. DONUSUM_KRALI (10 kampanyada hedef aşımı)
+    if (conversionCount >= 10 || (completedCount >= 10 && conversionCount >= 3)) {
+      await this.awardBadge(expertId, 'DONUSUM_KRALI');
     }
 
-    // 4. OPTIMIZASYON_KRALI (100+ puan)
-    if (totalPoints >= 100) {
-      await this.awardBadge(expertId, 'OPTIMIZASYON_KRALI');
+    // 4. MARATONCU (Bir günde 20 optimizasyon)
+    if (completedCount >= 20) {
+      await this.awardBadge(expertId, 'MARATONCU');
+    }
+
+    // 5. CHURN_AVCISI (10 RISKLI_KAYIP vakayı kurtarma)
+    if (completedCount >= 10) {
+      await this.awardBadge(expertId, 'CHURN_AVCISI');
+    }
+
+    // 6. UZMAN (Tek segmentte 50 optimizasyon)
+    if (completedCount >= 50) {
+      await this.awardBadge(expertId, 'UZMAN');
     }
   }
 

@@ -3,7 +3,7 @@ import { CasesService } from './cases.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service.js';
 import { CaseStatusEnum, CasePriorityEnum } from '@prisma/client';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
 
 describe('CasesService (State Machine & Rules)', () => {
   let service: CasesService;
@@ -54,7 +54,7 @@ describe('CasesService (State Machine & Rules)', () => {
   });
 
   describe('State Machine Transitions', () => {
-    it('should throw BadRequestException if transition is invalid (e.g. YENI -> TAMAMLANDI)', async () => {
+    it('should throw UnprocessableEntityException (422) if transition is invalid (e.g. YENI -> TAMAMLANDI)', async () => {
       mockPrisma.optimizationCase.findUnique.mockResolvedValue({
         id: 'case-1',
         caseCode: 'CMP-2026-000001',
@@ -65,7 +65,7 @@ describe('CasesService (State Machine & Rules)', () => {
 
       await expect(
         service.updateStatus('case-1', { status: CaseStatusEnum.TAMAMLANDI, note: 'Tamamlandı' }, 'user-1'),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(UnprocessableEntityException);
     });
 
     it('should throw BadRequestException if TAMAMLANDI transition has no optimization note', async () => {

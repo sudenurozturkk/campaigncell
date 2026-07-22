@@ -5,12 +5,12 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('Seeding gamification database...');
 
-  // 1. Levels Seed
+  // 1. Levels Seed (Case §6.3)
   const defaultLevels = [
-    { name: 'Bronz', minPoints: 0, maxPoints: 49 },
-    { name: 'Gümüş', minPoints: 50, maxPoints: 149 },
-    { name: 'Altın', minPoints: 150, maxPoints: 299 },
-    { name: 'Platin', minPoints: 300, maxPoints: null },
+    { name: 'Bronz', minPoints: 0, maxPoints: 499 },
+    { name: 'Gümüş', minPoints: 500, maxPoints: 1499 },
+    { name: 'Altın', minPoints: 1500, maxPoints: 2999 },
+    { name: 'Platin', minPoints: 3000, maxPoints: null },
   ];
 
   for (const lvl of defaultLevels) {
@@ -21,27 +21,37 @@ async function main() {
     });
   }
 
-  // 2. Badges Seed
+  // 2. Badges Seed (Case §6.2)
   const defaultBadges = [
     {
       code: 'ILK_KAMPANYA',
-      name: 'İlk Adım Ustası',
-      description: 'İlk kampanya optimizasyon vakasını başarıyla tamamlayan uzmana verilir.',
+      name: 'İlk Kampanya',
+      description: 'İlk optimizasyonu tamamlama.',
     },
     {
       code: 'HIZ_USTASI',
-      name: 'Hız Şampiyonu',
-      description: 'SLA süresi dolmadan 5 vaka optimizasyonunu başarıyla tamamlayan uzmana verilir.',
+      name: 'Hız Ustası',
+      description: '2 saatin altında 10 optimizasyon tamamlama.',
     },
     {
-      code: 'SLA_SAMPIYONU',
-      name: 'Kusursuz SLA',
-      description: 'Hiç SLA ihlali yapmadan 50 puana ulaşan uzmana verilir.',
+      code: 'DONUSUM_KRALI',
+      name: 'Dönüşüm Kralı',
+      description: '10 kampanyada hedef dönüşüm oranını aşma.',
     },
     {
-      code: 'OPTIMIZASYON_KRALI',
-      name: 'Optimizasyon Kralı',
-      description: 'Toplam 100 puana ulaşan uzmana verilen en prestijli rozet.',
+      code: 'MARATONCU',
+      name: 'Maratoncu',
+      description: 'Bir günde 20 optimizasyon tamamlama.',
+    },
+    {
+      code: 'CHURN_AVCISI',
+      name: 'Churn Avcısı',
+      description: '10 RISKLI_KAYIP vakasını başarıyla kurtarma.',
+    },
+    {
+      code: 'UZMAN',
+      name: 'Uzman',
+      description: 'Tek bir segmentte 50 optimizasyon tamamlama.',
     },
   ];
 

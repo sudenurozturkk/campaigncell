@@ -28,11 +28,11 @@ export class CampaignsService {
 
   private calculateSlaDeadline(priority: CasePriorityEnum): Date {
     const now = new Date();
-    let hoursToAdd = 72; // ORTA varsayılan
-    if (priority === CasePriorityEnum.KRITIK) hoursToAdd = 24;
-    else if (priority === CasePriorityEnum.YUKSEK) hoursToAdd = 48;
-    else if (priority === CasePriorityEnum.ORTA) hoursToAdd = 72;
-    else if (priority === CasePriorityEnum.DUSUK) hoursToAdd = 120;
+    let hoursToAdd = 24; // ORTA varsayılan (Case §4.4)
+    if (priority === CasePriorityEnum.KRITIK) hoursToAdd = 2;
+    else if (priority === CasePriorityEnum.YUKSEK) hoursToAdd = 8;
+    else if (priority === CasePriorityEnum.ORTA) hoursToAdd = 24;
+    else if (priority === CasePriorityEnum.DUSUK) hoursToAdd = 72;
 
     return new Date(now.getTime() + hoursToAdd * 60 * 60 * 1000);
   }
