@@ -1,0 +1,175 @@
+import os
+import pickle
+import numpy as np
+import pandas as pd
+from typing import Dict, Any, Tuple
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.metrics import accuracy_score, f1_score
+from app.ml.dataset_generator import generate_synthetic_telecom_dataset
+
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "saved_models")
+os.makedirs(MODEL_DIR, exist_ok=True)
+
+class PredictorEngine:
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(PredictorEngine, cls).__new__(cls)
+            cls._instance.segment_model = None
+            cls._instance.conversion_model = None
+            cls._instance.version_tag = "v1.0-rf"
+            cls._instance.active_accuracy = 0.8850
+            cls._instance.active_f1 = 0.8720
+            cls._instance._load_or_train_default_models()
+        return cls._instance
+
+    def _load_or_train_default_models(self):
+        segment_model_path = os.path.join(MODEL_DIR, "segment_model.pkl")
+        conversion_model_path = os.path.join(MODEL_DIR, "conversion_model.pkl")
+
+        if os.path.exists(segment_model_path) and os.path.exists(conversion_model_path):
+            try:
+                with open(segment_model_path, "rb") as f:
+                    self.segment_model = pickle.load(f)
+                with open(conversion_model_path, "rb") as f:
+                    self.conversion_model = pickle.load(f)
+                return
+            except Exception:
+                pass
+
+        # Eğitilmiş model yoksa varsayılan verisetiyle hızlı eğit
+        self.train_new_model(num_samples=1200, model_type="RandomForest")
+
+    def train_new_model(self, num_samples: int = 1200, model_type: str = "RandomForest") -> Tuple[str, float, float]:
+        df = generate_synthetic_telecom_dataset(num_samples=num_samples)
+
+        feature_cols = [
+            'monthly_data_usage_gb', 'monthly_voice_min', 'monthly_spend_try',
+            'tenure_months', 'past_accepted_count', 'past_rejected_count',
+            'complaint_count', 'data_usage_trend_pct'
+        ]
+
+        X = df[feature_cols]
+        y_segment = df['target_segment']
+        y_conversion = df['is_converted']
+
+        split_idx = int(len(df) * 0.8)
+        X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
+        y_seg_train, y_seg_test = y_segment.iloc[:split_idx], y_segment.iloc[split_idx:]
+        y_conv_train, y_conv_test = y_conversion.iloc[:split_idx], y_conversion.iloc[split_idx:]
+
+        if model_type == "GradientBoosting":
+            seg_clf = GradientBoostingClassifier(n_estimators=100, random_state=42)
+            conv_clf = GradientBoostingClassifier(n_estimators=100, random_state=42)
+        else:
+            seg_clf = RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42)
+            conv_clf = RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42)
+
+        seg_clf.fit(X_train, y_seg_train)
+        conv_clf.fit(X_train, y_conv_train)
+
+        seg_preds = seg_clf.predict(X_test)
+        acc = accuracy_score(y_seg_test, seg_preds)
+        f1 = f1_score(y_seg_test, seg_preds, average='weighted')
+
+        self.segment_model = seg_clf
+        self.conversion_model = conv_clf
+        self.version_tag = f"v{int(num_samples/1000)}.{np.random.randint(0, 9)}-{model_type[:2].lower()}"
+        self.active_accuracy = float(acc)
+        self.active_f1 = float(f1)
+
+        # Kaydet
+        with open(os.path.join(MODEL_DIR, "segment_model.pkl"), "wb") as f:
+            pickle.dump(seg_clf, f)
+        with open(os.path.join(MODEL_DIR, "conversion_model.pkl"), "wb") as f:
+            pickle.dump(conv_clf, f)
+
+        return self.version_tag, self.active_accuracy, self.active_f1
+
+    def generate_reasoning(self, features: Dict[str, Any], segment: str, priority: str, rec_score: float, conv_prob: float) -> str:
+        """
+        Açıklanabilir Yapay Zeka (XAI) için anlaşılır Türkçe gerekçe metni üretir.
+        """
+        reasons = []
+        d_gb = features.get('monthly_data_usage_gb', 0.0)
+        spend = features.get('monthly_spend_try', 0.0)
+        complaints = features.get('complaint_count', 0)
+        trend = features.get('data_usage_trend_pct', 0.0)
+        accepted = features.get('past_accepted_count', 0)
+
+        if complaints > 0:
+            reasons.append(f"Müşterinin {complaints} adet aktif şikayet kaydı bulunmaktadır")
+        if trend < 0:
+            reasons.append(f"Son 60 günlük veri kullanımı %{abs(trend):.1f} oranında düşüş göstermiştir")
+        if d_gb >= 25.0:
+            reasons.append(f"Aylık {d_gb:.1f} GB yüksek veri tüketimi mevcuttur")
+        if spend >= 300.0:
+            reasons.append(f"Aylık {spend:.0f} TL ortalama harcama ile yüksek ARPU kategorisindedir")
+
+        if accepted > 1:
+            reasons.append(f"Geçmişte {accepted} adet teklifi kabul etmiş sadık abonedir")
+
+        reason_text = ". ".join(reasons) if reasons else "Abone kullanım alışkanlıkları ve standart telko profil analizine dayanmaktadır"
+
+        return f"AI Analizi: [{segment}] segmenti ve [{priority}] önceliği belirlenmiştir. Gerekçe: {reason_text}. Tahmini dönüşüm olasılığı: %{int(conv_prob * 100)}."
+
+    def predict(self, features: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Girdi profil özelliklerine göre öneri skoru, dönüşüm olasılığı, segment, öncelik ve gerekçe üretir.
+        """
+        input_data = pd.DataFrame([{
+            'monthly_data_usage_gb': float(features.get('monthly_data_usage_gb', 10.0)),
+            'monthly_voice_min': float(features.get('monthly_voice_min', 500.0)),
+            'monthly_spend_try': float(features.get('monthly_spend_try', 250.0)),
+            'tenure_months': int(features.get('tenure_months', 12)),
+            'past_accepted_count': int(features.get('past_accepted_count', 1)),
+            'past_rejected_count': int(features.get('past_rejected_count', 0)),
+            'complaint_count': int(features.get('complaint_count', 0)),
+            'data_usage_trend_pct': float(features.get('data_usage_trend_pct', 5.0)),
+        }])
+
+        if self.segment_model is not None and self.conversion_model is not None:
+            segment = self.segment_model.predict(input_data)[0]
+            conv_prob = float(self.conversion_model.predict_proba(input_data)[0][1]) if hasattr(self.conversion_model, "predict_proba") else 0.65
+        else:
+            # Fallback kural tabanlı tahmin
+            complaints = features.get('complaint_count', 0)
+            spend = features.get('monthly_spend_try', 0)
+            if complaints >= 2:
+                segment = "RISKLI_KAYIP"
+                conv_prob = 0.35
+            elif spend >= 300:
+                segment = "YUKSEK_DEGER"
+                conv_prob = 0.82
+            else:
+                segment = "YENI_ABONE"
+                conv_prob = 0.60
+
+        # Öncelik Tayini
+        if segment == "RISKLI_KAYIP":
+            priority = "KRITIK" if features.get('complaint_count', 0) >= 3 else "YUKSEK"
+        elif segment == "YUKSEK_DEGER":
+            priority = "YUKSEK"
+        elif segment == "YENI_ABONE":
+            priority = "ORTA"
+        elif segment == "PASIF":
+            priority = "DUSUK"
+        else:
+            priority = "ORTA"
+
+        # Öneri Skoru (Dönüşüm olasılığı + Sadakat faktörleri)
+        accepted = features.get('past_accepted_count', 1)
+        rec_score = float(np.clip((conv_prob * 0.7) + (accepted * 0.05) + 0.15, 0.1, 0.99))
+        conv_prob = float(np.clip(conv_prob, 0.05, 0.95))
+
+        reasoning = self.generate_reasoning(features, segment, priority, rec_score, conv_prob)
+
+        return {
+            'recommendation_score': round(rec_score, 3),
+            'conversion_probability': round(conv_prob, 3),
+            'predicted_segment': segment,
+            'predicted_priority': priority,
+            'reasoning': reasoning,
+            'model_version': self.version_tag,
+        }

@@ -1,0 +1,70 @@
+from pydantic import BaseModel, Field
+from typing import Optional, List, Dict, Any
+
+class SubscriberProfileBase(BaseModel):
+    current_tariff: Optional[str] = "Standart Tarife"
+    monthly_data_usage_gb: float = Field(default=10.0, ge=0)
+    monthly_voice_min: float = Field(default=500.0, ge=0)
+    monthly_spend_try: float = Field(default=250.0, ge=0)
+    tenure_months: int = Field(default=12, ge=0)
+    past_accepted_count: int = Field(default=1, ge=0)
+    past_rejected_count: int = Field(default=0, ge=0)
+    complaint_count: int = Field(default=0, ge=0)
+    data_usage_trend_pct: float = Field(default=5.0)
+
+class SubscriberProfileCreate(SubscriberProfileBase):
+    subscriber_id: str
+
+class SubscriberProfileResponse(SubscriberProfileBase):
+    id: str
+    subscriber_id: str
+
+    class Config:
+        from_attributes = True
+
+class RecommendRequest(BaseModel):
+    subscriber_id: str
+    campaign_id: Optional[str] = None
+    case_id: Optional[str] = None
+    campaign_type: Optional[str] = "EK_PAKET"
+    # Profil güncel değilse override gönderilebilir
+    profile_override: Optional[SubscriberProfileBase] = None
+
+class ExpertScoreInfo(BaseModel):
+    expert_id: str
+    expert_name: str
+    assignment_score: float
+    reasoning: str
+
+class RecommendResponse(BaseModel):
+    prediction_id: str
+    subscriber_id: str
+    campaign_id: Optional[str] = None
+    case_id: Optional[str] = None
+    recommendation_score: float = Field(description="0.0 ile 1.0 arasında öneri skoru")
+    conversion_probability: float = Field(description="0.0 ile 1.0 arasında teklif dönüşüm olasılığı")
+    predicted_segment: str = Field(description="YUKSEK_DEGER, RISKLI_KAYIP, YENI_ABONE, PASIF, BELIRSIZ")
+    predicted_priority: str = Field(description="DUSUK, ORTA, YUKSEK, KRITIK")
+    reasoning: str = Field(description="Açıklanabilir AI gerekçesi")
+    recommended_expert: Optional[ExpertScoreInfo] = None
+    model_version: str
+
+class TrainModelRequest(BaseModel):
+    num_samples: int = Field(default=1000, ge=100, le=10000)
+    model_type: str = Field(default="RandomForest", description="RandomForest or GradientBoosting")
+
+class TrainModelResponse(BaseModel):
+    model_version_id: str
+    version_tag: str
+    model_type: str
+    trained_on: int
+    accuracy: float
+    f1_score: float
+    message: str
+
+class AccuracyResponse(BaseModel):
+    total_predictions: int
+    misclassified_count: int
+    corrected_predictions_count: int
+    accuracy_percentage: float
+    active_model_version: Optional[str] = None
