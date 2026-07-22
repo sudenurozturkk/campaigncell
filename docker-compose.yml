@@ -93,17 +93,17 @@ services:
       - campaign-network
 
   # ==========================================
-  # SERVICES (Phase 2 Stubs)
+  # MICROSERVICES & GATEWAY & FRONTEND
   # ==========================================
   frontend:
     build:
       context: ./apps/frontend
     container_name: frontend
     environment:
-      PORT: ${FRONTEND_PORT:-3000}
-      SERVICE_NAME: Frontend
+      PORT: 3000
+      NEXT_PUBLIC_API_GATEWAY_URL: http://localhost:8080
     ports:
-      - "${FRONTEND_PORT:-3000}:${FRONTEND_PORT:-3000}"
+      - "3000:3000"
     networks:
       - campaign-network
 
@@ -112,10 +112,20 @@ services:
       context: ./services/api-gateway
     container_name: api-gateway
     environment:
-      PORT: ${API_GATEWAY_PORT:-8080}
-      SERVICE_NAME: API Gateway
+      PORT: 8080
+      API_GATEWAY_PORT: 8080
+      JWT_SECRET: campaigncell-secret-key-change-in-prod
+      IDENTITY_SERVICE_URL: http://identity-service:3001
+      CAMPAIGN_SERVICE_URL: http://campaign-service:3002
+      AI_SERVICE_URL: http://ai-service:8000
+      GAMIFICATION_SERVICE_URL: http://gamification-service:3003
     ports:
-      - "${API_GATEWAY_PORT:-8080}:${API_GATEWAY_PORT:-8080}"
+      - "8080:8080"
+    depends_on:
+      - identity-service
+      - campaign-service
+      - ai-service
+      - gamification-service
     networks:
       - campaign-network
 
@@ -124,10 +134,13 @@ services:
       context: ./services/identity-service
     container_name: identity-service
     environment:
-      PORT: ${IDENTITY_SERVICE_PORT:-3001}
-      SERVICE_NAME: Identity Service
+      PORT: 3001
+      IDENTITY_SERVICE_PORT: 3001
+      DATABASE_URL: postgresql://postgres:postgres@identity-db:5432/identity
+      JWT_SECRET: campaigncell-secret-key-change-in-prod
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     ports:
-      - "${IDENTITY_SERVICE_PORT:-3001}:${IDENTITY_SERVICE_PORT:-3001}"
+      - "3001:3001"
     depends_on:
       identity-db:
         condition: service_healthy
@@ -141,10 +154,14 @@ services:
       context: ./services/campaign-service
     container_name: campaign-service
     environment:
-      PORT: ${CAMPAIGN_SERVICE_PORT:-3002}
-      SERVICE_NAME: Campaign Service
+      PORT: 3002
+      CAMPAIGN_SERVICE_PORT: 3002
+      DATABASE_URL: postgresql://postgres:postgres@campaign-db:5432/campaign
+      JWT_SECRET: campaigncell-secret-key-change-in-prod
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      AI_SERVICE_URL: http://ai-service:8000
     ports:
-      - "${CAMPAIGN_SERVICE_PORT:-3002}:${CAMPAIGN_SERVICE_PORT:-3002}"
+      - "3002:3002"
     depends_on:
       campaign-db:
         condition: service_healthy
@@ -158,10 +175,12 @@ services:
       context: ./services/ai-service
     container_name: ai-service
     environment:
-      PORT: ${AI_SERVICE_PORT:-8000}
-      SERVICE_NAME: AI Service
+      PORT: 8000
+      AI_SERVICE_PORT: 8000
+      DATABASE_URL: postgresql://postgres:postgres@ai-db:5432/ai
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     ports:
-      - "${AI_SERVICE_PORT:-8000}:${AI_SERVICE_PORT:-8000}"
+      - "8000:8000"
     depends_on:
       ai-db:
         condition: service_healthy
@@ -175,10 +194,13 @@ services:
       context: ./services/gamification-service
     container_name: gamification-service
     environment:
-      PORT: ${GAMIFICATION_SERVICE_PORT:-3003}
-      SERVICE_NAME: Gamification Service
+      PORT: 3003
+      GAMIFICATION_SERVICE_PORT: 3003
+      DATABASE_URL: postgresql://postgres:postgres@gamification-db:5432/gamification
+      JWT_SECRET: campaigncell-secret-key-change-in-prod
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     ports:
-      - "${GAMIFICATION_SERVICE_PORT:-3003}:${GAMIFICATION_SERVICE_PORT:-3003}"
+      - "3003:3003"
     depends_on:
       gamification-db:
         condition: service_healthy
