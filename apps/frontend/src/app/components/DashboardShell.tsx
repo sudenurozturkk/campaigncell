@@ -39,7 +39,7 @@ const ROLE_CONFIG = {
     color: 'blue',
     badgeBg: 'bg-blue-500/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20',
     links: [
-      { href: '/dashboard/subscriber', label: 'Fırsatlarım', icon: Gift, badge: '3' },
+      { href: '/dashboard/subscriber?tab=offers', label: 'Fırsatlarım', icon: Gift, badge: '3' },
       { href: '/dashboard/subscriber/profile', label: 'Profilim', icon: User },
       { href: '/dashboard/subscriber/history', label: 'Teklif Geçmişi', icon: History },
     ] as SidebarLink[],
@@ -49,7 +49,7 @@ const ROLE_CONFIG = {
     color: 'amber',
     badgeBg: 'bg-amber-500/10 dark:bg-turkcell-yellow/15 text-amber-700 dark:text-turkcell-yellow border-amber-500/20',
     links: [
-      { href: '/dashboard/expert', label: 'Vakalarım', icon: Layers, badge: '3' },
+      { href: '/dashboard/expert?tab=active', label: 'Vakalarım', icon: Layers, badge: '3' },
       { href: '/dashboard/expert/profile', label: 'Performansım', icon: Trophy },
       { href: '/dashboard/expert/archive', label: 'Kampanya Arşivi', icon: Archive },
     ] as SidebarLink[],
@@ -70,9 +70,9 @@ const ROLE_CONFIG = {
     color: 'red',
     badgeBg: 'bg-red-500/10 dark:bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/20',
     links: [
-      { href: '/dashboard/admin', label: 'Kullanıcı Yönetimi', icon: UserCheck },
-      { href: '/dashboard/admin', label: 'Audit Loglar', icon: History },
-      { href: '/dashboard/supervisor', label: 'Sistem Performansı', icon: BarChart3 },
+      { href: '/dashboard/admin?tab=users', label: 'Kullanıcı Yönetimi', icon: UserCheck },
+      { href: '/dashboard/admin?tab=audit', label: 'Audit Loglar', icon: History },
+      { href: '/dashboard/supervisor?tab=overview', label: 'Sistem Performansı', icon: BarChart3 },
     ] as SidebarLink[],
   },
   ADMIN: {
@@ -80,9 +80,9 @@ const ROLE_CONFIG = {
     color: 'red',
     badgeBg: 'bg-red-500/10 dark:bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/20',
     links: [
-      { href: '/dashboard/admin', label: 'Kullanıcı Yönetimi', icon: UserCheck },
-      { href: '/dashboard/admin', label: 'Audit Loglar', icon: History },
-      { href: '/dashboard/supervisor', label: 'Sistem Performansı', icon: BarChart3 },
+      { href: '/dashboard/admin?tab=users', label: 'Kullanıcı Yönetimi', icon: UserCheck },
+      { href: '/dashboard/admin?tab=audit', label: 'Audit Loglar', icon: History },
+      { href: '/dashboard/supervisor?tab=overview', label: 'Sistem Performansı', icon: BarChart3 },
     ] as SidebarLink[],
   },
 };

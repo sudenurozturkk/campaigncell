@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import DashboardShell from '../../components/DashboardShell';
 import {
   Plus, AlertTriangle, CheckCircle2, Clock,
@@ -44,7 +45,10 @@ const priorityConfig: Record<string, { bg: string; text: string }> = {
   DUSUK: { bg: 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700', text: 'text-slate-700 dark:text-slate-400 font-medium' },
 };
 
-export default function ExpertDashboard() {
+function ExpertDashboardContent() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+
   const [cases, setCases] = useState<CaseItem[]>([
     {
       id: 'case-1', caseCode: 'CMP-2026-000101',
@@ -76,6 +80,12 @@ export default function ExpertDashboard() {
   const [selectedCase, setSelectedCase] = useState<CaseItem | null>(cases[0]);
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'completed'>('active');
   const [optNote, setOptNote] = useState('');
+  
+  useEffect(() => {
+    if (tabParam && ['all', 'active', 'completed'].includes(tabParam)) {
+      setActiveTab(tabParam as typeof activeTab);
+    }
+  }, [tabParam]);
   const [newSeg, setNewSeg] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
 
@@ -356,5 +366,17 @@ export default function ExpertDashboard() {
         </div>
       )}
     </DashboardShell>
+  );
+}
+
+export default function ExpertDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 dark:bg-[#050810] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-amber-500 animate-spin"></div>
+      </div>
+    }>
+      <ExpertDashboardContent />
+    </Suspense>
   );
 }

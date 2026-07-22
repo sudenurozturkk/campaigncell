@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import DashboardShell from '../../components/DashboardShell';
 import {
   Sparkles, CheckCircle2, XCircle, Star,
@@ -50,7 +50,10 @@ function ScoreRing({ score, size = 64 }: { score: number; size?: number }) {
   );
 }
 
-export default function SubscriberDashboard() {
+function SubscriberDashboardContent() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+
   const [offers, setOffers] = useState<Offer[]>([
     {
       id: 'camp-101', code: 'CMP-2026-000101',
@@ -79,6 +82,12 @@ export default function SubscriberDashboard() {
   ]);
 
   const [activeTab, setActiveTab] = useState<'offers' | 'my_campaigns'>('offers');
+
+  useEffect(() => {
+    if (tabParam && (tabParam === 'offers' || tabParam === 'my_campaigns')) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   const handleRespond = (id: string, response: 'ACCEPTED' | 'REJECTED') => {
     setOffers(prev => prev.map(o => o.id === id ? { ...o, status: response } : o));
@@ -284,5 +293,17 @@ export default function SubscriberDashboard() {
         )}
       </div>
     </DashboardShell>
+  );
+}
+
+export default function SubscriberDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 dark:bg-[#050810] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-turkcell-blue animate-spin"></div>
+      </div>
+    }>
+      <SubscriberDashboardContent />
+    </Suspense>
   );
 }

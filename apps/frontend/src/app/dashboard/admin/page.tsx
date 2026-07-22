@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import DashboardShell from '../../components/DashboardShell';
 import {
   Users, UserPlus, ShieldCheck, Lock, Unlock, Activity,
@@ -54,7 +55,10 @@ const ROLE_META: Record<Role, { label: string; color: string; icon: React.Elemen
   SUBSCRIBER: { label: 'Abone', color: 'text-blue-700 dark:text-blue-400 bg-blue-500/10 border-blue-500/20', icon: UserCheck },
 };
 
-export default function AdminDashboard() {
+function AdminDashboardContent() {
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+
   const [activeTab, setActiveTab] = useState<'users' | 'create' | 'audit'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -62,6 +66,12 @@ export default function AdminDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<Role | 'ALL'>('ALL');
+
+  useEffect(() => {
+    if (tabParam && ['users', 'create', 'audit'].includes(tabParam)) {
+      setActiveTab(tabParam as typeof activeTab);
+    }
+  }, [tabParam]);
 
   // Create form
   const [form, setForm] = useState({
@@ -211,7 +221,10 @@ export default function AdminDashboard() {
           ].map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key as typeof activeTab)}
+              onClick={() => {
+                setActiveTab(tab.key as typeof activeTab);
+                window.history.pushState(null, '', `?tab=${tab.key}`);
+              }}
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
                 activeTab === tab.key
                   ? 'bg-turkcell-navy text-white dark:bg-turkcell-yellow dark:text-turkcell-navy shadow-sm'
@@ -552,5 +565,17 @@ export default function AdminDashboard() {
         )}
       </div>
     </DashboardShell>
+  );
+}
+
+export default function AdminDashboard() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-slate-50 dark:bg-[#050810] flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-red-600 animate-spin"></div>
+      </div>
+    }>
+      <AdminDashboardContent />
+    </Suspense>
   );
 }
