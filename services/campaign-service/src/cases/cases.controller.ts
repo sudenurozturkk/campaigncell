@@ -25,9 +25,10 @@ export class CasesController {
     return this.casesService.findOne(id);
   }
 
+  // Case §3.3: Manuel atama yalnızca Süpervizör (Yönetici) / Admin
   @Post(':id/assign')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(RoleEnum.CAMPAIGN_EXPERT, RoleEnum.SUPERVISOR, RoleEnum.ADMIN)
+  @Roles(RoleEnum.SUPERVISOR, RoleEnum.ADMIN)
   assignExpert(
     @Param('id') id: string,
     @Body() dto: AssignExpertDto,
@@ -36,6 +37,7 @@ export class CasesController {
     return this.casesService.assignExpert(id, dto, user.userId);
   }
 
+  // Rol kontrolü geçiş bazlı yapılır (servis katmanı, Case §4.2)
   @Patch(':id/status')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(RoleEnum.CAMPAIGN_EXPERT, RoleEnum.SUPERVISOR, RoleEnum.ADMIN)
@@ -44,7 +46,7 @@ export class CasesController {
     @Body() dto: UpdateCaseStatusDto,
     @CurrentUser() user: UserPayload,
   ) {
-    return this.casesService.updateStatus(id, dto, user.userId);
+    return this.casesService.updateStatus(id, dto, user.userId, user.role);
   }
 
   @Patch(':id/segment')

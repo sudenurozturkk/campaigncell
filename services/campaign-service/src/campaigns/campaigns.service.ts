@@ -4,7 +4,10 @@ import { RabbitMQService } from '../rabbitmq/rabbitmq.service.js';
 import { CreateCampaignDto } from './dto/create-campaign.dto.js';
 import { UpdateCampaignDto } from './dto/update-campaign.dto.js';
 import { QueryCampaignDto } from './dto/query-campaign.dto.js';
-import { CampaignStatusEnum, TargetSegmentEnum, CasePriorityEnum, CaseStatusEnum } from '@prisma/client';
+import { CampaignStatusEnum, TargetSegmentEnum, CasePriorityEnum, CaseStatusEnum, AssignedByEnum } from '@prisma/client';
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PRIORITY_ORDER: Record<string, number> = { DUSUK: 1, ORTA: 2, YUKSEK: 3, KRITIK: 4 };
 
 @Injectable()
 export class CampaignsService {
@@ -17,13 +20,90 @@ export class CampaignsService {
 
   private async generateUniqueCode(): Promise<string> {
     const year = new Date().getFullYear();
-    for (let i = 0; i < 10; i++) {
-      const randomNum = Math.floor(100000 + Math.random() * 900000);
-      const code = `CMP-${year}-${randomNum}`;
+    // Case §4.1: benzersiz + okunabilir sıralı format (örn: CMP-2026-000123)
+    for (let i = 0; i < 15; i++) {
+      const count = await this.prisma.campaign.count();
+      const seq = (count + 101 + i).toString().padStart(6, '0');
+      const code = `CMP-${year}-${seq}`;
       const existing = await this.prisma.campaign.findUnique({ where: { code } });
       if (!existing) return code;
     }
     return `CMP-${year}-${Date.now().toString().slice(-6)}`;
+  }
+
+  /**
+   * Segment → temsili abone profili (AI'ın kampanya-bağlamlı skorlaması için ipucu).
+   */
+  private buildProfileHint(segment?: string): Record<string, number> | undefined {
+    switch (segment) {
+      case 'RISKLI_KAYIP':
+        return { monthly_data_usage_gb: 2, monthly_voice_min: 90, monthly_spend_try: 80,
+          tenure_months: 30, past_accepted_count: 0, past_rejected_count: 3, complaint_count: 4, data_usage_trend_pct: -40 };
+      case 'YUKSEK_DEGER':
+        return { monthly_data_usage_gb: 45, monthly_voice_min: 1500, monthly_spend_try: 600,
+          tenure_months: 48, past_accepted_count: 5, past_rejected_count: 0, complaint_count: 0, data_usage_trend_pct: 20 };
+      case 'YENI_ABONE':
+        return { monthly_data_usage_gb: 12, monthly_voice_min: 400, monthly_spend_try: 200,
+          tenure_months: 2, past_accepted_count: 0, past_rejected_count: 0, complaint_count: 0, data_usage_trend_pct: 5 };
+      case 'PASIF':
+        return { monthly_data_usage_gb: 3, monthly_voice_min: 150, monthly_spend_try: 90,
+          tenure_months: 20, past_accepted_count: 1, past_rejected_count: 2, complaint_count: 1, data_usage_trend_pct: -12 };
+      default:
+        return undefined;
+    }
+  }
+
+  /**
+   * AI Service'e SENKRON öneri çağrısı (Case §4.1). 5 sn timeout.
+   * Erişilemezse null döner → çağıran taraf degradation moduna geçer.
+   */
+  private async requestAiPrediction(input: { code: string; type: string; requestedSegment?: string }): Promise<any | null> {
+    const base = process.env.AI_SERVICE_URL || 'http://ai-service:8000';
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
+    try {
+      const res = await fetch(`${base}/api/v1/ai/recommend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subscriber_id: `campaign-preview-${input.code}`,
+          campaign_type: input.type,
+          profile_override: this.buildProfileHint(input.requestedSegment),
+        }),
+        signal: controller.signal,
+      });
+      if (!res.ok) {
+        this.logger.warn(`AI Service HTTP ${res.status} döndü — degradation moduna geçiliyor.`);
+        return null;
+      }
+      return await res.json();
+    } catch (e) {
+      this.logger.warn(`AI Service erişilemedi (degradation): ${(e as Error).message}`);
+      return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Öncelik türetme (Case §4.3): RISKLI_KAYIP minimum YUKSEK; BELIRSIZ → ORTA.
+   */
+  private derivePriority(segment: TargetSegmentEnum, aiPriority?: string): CasePriorityEnum {
+    if (segment === TargetSegmentEnum.BELIRSIZ) return CasePriorityEnum.ORTA;
+
+    let p: CasePriorityEnum =
+      aiPriority && (CasePriorityEnum as any)[aiPriority]
+        ? (aiPriority as CasePriorityEnum)
+        : CasePriorityEnum.ORTA;
+
+    // RISKLI_KAYIP churn riski → minimum YUKSEK
+    if (segment === TargetSegmentEnum.RISKLI_KAYIP && PRIORITY_ORDER[p] < PRIORITY_ORDER.YUKSEK) {
+      p = CasePriorityEnum.YUKSEK;
+    }
+    if (segment === TargetSegmentEnum.YUKSEK_DEGER && PRIORITY_ORDER[p] < PRIORITY_ORDER.YUKSEK) {
+      p = CasePriorityEnum.YUKSEK;
+    }
+    return p;
   }
 
   private calculateSlaDeadline(priority: CasePriorityEnum): Date {
@@ -39,26 +119,61 @@ export class CampaignsService {
 
   async create(dto: CreateCampaignDto, userId: string) {
     const code = await this.generateUniqueCode();
-    
-    // AI Service Degredation Check
-    let targetSegment = dto.targetSegment || TargetSegmentEnum.BELIRSIZ;
-    let status: CampaignStatusEnum = CampaignStatusEnum.ACTIVE;
-    let priority: CasePriorityEnum = CasePriorityEnum.ORTA;
-    let aiScore = 0.75;
-    let aiConversionProb = 0.45;
-    let aiReasoning = 'Standart kural tabanlı ilk analiz.';
 
-    if (targetSegment === TargetSegmentEnum.BELIRSIZ) {
-      status = CampaignStatusEnum.MANUAL_OPTIMIZATION_REQUIRED;
+    // Case §4.1: Kampanya segmente hedeflendiğinde AI Service'e SENKRON gönderilir.
+    const ai = await this.requestAiPrediction({
+      code,
+      type: dto.type,
+      requestedSegment: dto.targetSegment,
+    });
+    const aiAvailable = !!ai;
+
+    let targetSegment: TargetSegmentEnum;
+    let priority: CasePriorityEnum;
+    let status: CampaignStatusEnum;
+    let aiScore: number;
+    let aiConversionProb: number;
+    let aiReasoning: string;
+    let recommendedExpertId: string | null = null;
+    let assignmentScore: number | null = null;
+
+    if (!aiAvailable) {
+      // Case §2.2 & §4.1 BAĞIMSIZLIK: AI erişilemez → her durumda BELIRSIZ + ORTA + manuel kuyruk.
+      targetSegment = TargetSegmentEnum.BELIRSIZ;
       priority = CasePriorityEnum.ORTA;
-      aiReasoning = 'AI servis erişilemediği için manuel optimizasyon kuyruğuna alındı.';
-    } else if (targetSegment === TargetSegmentEnum.RISKLI_KAYIP) {
-      priority = CasePriorityEnum.KRITIK;
-    } else if (targetSegment === TargetSegmentEnum.YUKSEK_DEGER) {
-      priority = CasePriorityEnum.YUKSEK;
+      status = CampaignStatusEnum.MANUAL_OPTIMIZATION_REQUIRED;
+      aiScore = 0;
+      aiConversionProb = 0;
+      aiReasoning =
+        'AI Service erişilemedi. Vaka BELIRSIZ olarak işaretlendi ve ORTA öncelikle manuel optimizasyon kuyruğuna alındı (servis bağımsızlığı).';
+    } else {
+      // Kullanıcı segment verdiyse onu koru, yoksa AI'ın atadığı segmenti kullan.
+      targetSegment =
+        (dto.targetSegment as TargetSegmentEnum) ||
+        (ai.predicted_segment as TargetSegmentEnum) ||
+        TargetSegmentEnum.BELIRSIZ;
+      priority = this.derivePriority(targetSegment, ai.predicted_priority);
+      status =
+        targetSegment === TargetSegmentEnum.BELIRSIZ
+          ? CampaignStatusEnum.MANUAL_OPTIMIZATION_REQUIRED
+          : CampaignStatusEnum.ACTIVE;
+      aiScore = typeof ai.recommendation_score === 'number' ? ai.recommendation_score : 0.5;
+      aiConversionProb = typeof ai.conversion_probability === 'number' ? ai.conversion_probability : 0.4;
+      aiReasoning = ai.reasoning || 'AI analizi tamamlandı.';
+      if (ai.recommended_expert?.expert_id && UUID_RE.test(ai.recommended_expert.expert_id)) {
+        recommendedExpertId = ai.recommended_expert.expert_id;
+        assignmentScore =
+          typeof ai.recommended_expert.assignment_score === 'number'
+            ? ai.recommended_expert.assignment_score
+            : 0.8;
+      }
     }
 
-    const campaign = await this.prisma.$transaction(async (tx) => {
+    // Akıllı otomatik atama: AI bir uzman önerdiyse ve segment belirliyse → ATANDI
+    const autoAssign = !!recommendedExpertId && targetSegment !== TargetSegmentEnum.BELIRSIZ;
+    const caseStatus = autoAssign ? CaseStatusEnum.ATANDI : CaseStatusEnum.YENI;
+
+    const { campaign, optCase } = await this.prisma.$transaction(async (tx) => {
       const createdCampaign = await tx.campaign.create({
         data: {
           code,
@@ -76,15 +191,17 @@ export class CampaignsService {
         },
       });
 
-      // Kampanyaya bağlı optimizasyon vakası oluşturma
+      // SLA vaka oluşturma anından itibaren sayılır (Case §4.4)
       const slaDeadline = this.calculateSlaDeadline(priority);
-      const optCase = await tx.optimizationCase.create({
+      const created = await tx.optimizationCase.create({
         data: {
           caseCode: code,
           campaignId: createdCampaign.id,
           segment: targetSegment,
           priority,
-          status: CaseStatusEnum.YENI,
+          status: caseStatus,
+          assignedExpertId: autoAssign ? recommendedExpertId : null,
+          assignedAt: autoAssign ? new Date() : null,
           aiScore,
           aiConversionProb,
           aiReasoning,
@@ -92,33 +209,60 @@ export class CampaignsService {
         },
       });
 
-      // Durum geçmişi kaydı
+      if (autoAssign) {
+        await tx.campaignAssignment.create({
+          data: {
+            caseId: created.id,
+            expertId: recommendedExpertId as string,
+            assignedBy: AssignedByEnum.AI,
+            assignmentScore: assignmentScore ?? 0.8,
+          },
+        });
+      }
+
       await tx.campaignHistory.create({
         data: {
-          caseId: optCase.id,
+          caseId: created.id,
           fromStatus: null,
-          toStatus: CaseStatusEnum.YENI,
+          toStatus: caseStatus,
           changedBy: userId,
-          note: 'Kampanya oluşturuldu ve ilk vaka açıldı.',
+          note: autoAssign
+            ? `Kampanya oluşturuldu; AI vakayı ${recommendedExpertId} uzmanına otomatik atadı.`
+            : 'Kampanya oluşturuldu ve ilk vaka açıldı.',
         },
       });
 
-      return createdCampaign;
+      return { campaign: createdCampaign, optCase: created };
     });
 
-    // RabbitMQ Event yayınlama
+    // Case §9: campaign.created event'i (case_id dahil)
     await this.rabbitmq.publishEvent('campaign.created', {
       campaign_id: campaign.id,
+      case_id: optCase.id,
       code: campaign.code,
       name: campaign.name,
       type: campaign.type,
       target_segment: campaign.targetSegment,
+      priority,
       status: campaign.status,
+      ai_available: aiAvailable,
       created_by: userId,
       created_at: campaign.createdAt,
     });
 
-    return campaign;
+    if (autoAssign) {
+      await this.rabbitmq.publishEvent('campaign.assigned', {
+        case_id: optCase.id,
+        case_code: optCase.caseCode,
+        campaign_id: campaign.id,
+        expert_id: recommendedExpertId,
+        assigned_by: AssignedByEnum.AI,
+        assignment_score: assignmentScore,
+        assigned_at: new Date().toISOString(),
+      });
+    }
+
+    return { ...campaign, optimizationCaseId: optCase.id, aiAvailable };
   }
 
   async findAll(query: QueryCampaignDto) {

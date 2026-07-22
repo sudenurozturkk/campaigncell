@@ -58,8 +58,9 @@ export class CampaignEventConsumerService implements OnModuleInit {
           updateData.segment = payload.predicted_segment;
         }
 
-        // Otomatik AI Uzman Önerisi ve Ataması
-        if (payload.recommended_expert_id && !optCase.assignedExpertId) {
+        // Otomatik AI Uzman Önerisi ve Ataması (yalnızca geçerli UUID uzman id'si)
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (payload.recommended_expert_id && UUID_RE.test(payload.recommended_expert_id) && !optCase.assignedExpertId) {
           updateData.assignedExpertId = payload.recommended_expert_id;
           updateData.assignedAt = new Date();
           updateData.status = CaseStatusEnum.ATANDI;

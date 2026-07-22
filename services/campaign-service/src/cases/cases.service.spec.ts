@@ -3,7 +3,7 @@ import { CasesService } from './cases.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service.js';
 import { CaseStatusEnum, CasePriorityEnum } from '@prisma/client';
-import { BadRequestException, NotFoundException, UnprocessableEntityException } from '@nestjs/common';
+import { BadRequestException, NotFoundException, UnprocessableEntityException, ForbiddenException } from '@nestjs/common';
 
 describe('CasesService (State Machine & Rules)', () => {
   let service: CasesService;
@@ -61,10 +61,13 @@ describe('CasesService (State Machine & Rules)', () => {
         status: CaseStatusEnum.YENI,
         priority: CasePriorityEnum.ORTA,
         campaignId: 'camp-1',
+        createdAt: new Date(),
+        slaDeadline: new Date(Date.now() + 86400000),
+        slaBreached: false,
       });
 
       await expect(
-        service.updateStatus('case-1', { status: CaseStatusEnum.TAMAMLANDI, note: 'Tamamlandı' }, 'user-1'),
+        service.updateStatus('case-1', { status: CaseStatusEnum.TAMAMLANDI, note: 'Tamamlandı' }, 'user-1', 'ADMIN'),
       ).rejects.toThrow(UnprocessableEntityException);
     });
 
@@ -76,10 +79,13 @@ describe('CasesService (State Machine & Rules)', () => {
         priority: CasePriorityEnum.ORTA,
         campaignId: 'camp-1',
         optimizationNote: null,
+        createdAt: new Date(),
+        slaDeadline: new Date(Date.now() + 86400000),
+        slaBreached: false,
       });
 
       await expect(
-        service.updateStatus('case-1', { status: CaseStatusEnum.TAMAMLANDI, note: '' }, 'user-1'),
+        service.updateStatus('case-1', { status: CaseStatusEnum.TAMAMLANDI, note: '' }, 'user-1', 'CAMPAIGN_EXPERT'),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -108,10 +114,29 @@ describe('CasesService (State Machine & Rules)', () => {
         'case-1',
         { status: CaseStatusEnum.TAMAMLANDI, note: 'Detaylı indirim optimizasyonu tamamlandı.', conversionLift: 0.20 },
         'user-1',
+        'CAMPAIGN_EXPERT',
       );
 
       expect(result.status).toBe(CaseStatusEnum.TAMAMLANDI);
       expect(mockRabbitMQ.publishEvent).toHaveBeenCalledWith('campaign.optimized', expect.anything());
+    });
+
+    it('should throw ForbiddenException (403) if a CAMPAIGN_EXPERT tries TAMAMLANDI -> YAYINDA (manager-only)', async () => {
+      mockPrisma.optimizationCase.findUnique.mockResolvedValue({
+        id: 'case-1',
+        caseCode: 'CMP-2026-000001',
+        status: CaseStatusEnum.TAMAMLANDI,
+        priority: CasePriorityEnum.ORTA,
+        campaignId: 'camp-1',
+        optimizationNote: 'ok',
+        createdAt: new Date(),
+        slaDeadline: new Date(Date.now() + 86400000),
+        slaBreached: false,
+      });
+
+      await expect(
+        service.updateStatus('case-1', { status: CaseStatusEnum.YAYINDA }, 'user-1', 'CAMPAIGN_EXPERT'),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should set isAiMisclassified=true and emit segment.changed event when segment is overridden', async () => {
@@ -120,6 +145,11 @@ describe('CasesService (State Machine & Rules)', () => {
         caseCode: 'CMP-2026-000001',
         segment: 'BELIRSIZ',
         status: CaseStatusEnum.ATANDI,
+        priority: CasePriorityEnum.ORTA,
+        campaignId: 'camp-1',
+        createdAt: new Date(),
+        slaDeadline: new Date(Date.now() + 86400000),
+        slaBreached: false,
       };
 
       mockPrisma.optimizationCase.findUnique.mockResolvedValue(mockCase);

@@ -1,11 +1,14 @@
-import { Injectable, NotFoundException, BadRequestException, UnprocessableEntityException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, UnprocessableEntityException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RabbitMQService } from '../rabbitmq/rabbitmq.service.js';
 import { AssignExpertDto } from './dto/assign-expert.dto.js';
 import { UpdateCaseStatusDto } from './dto/update-case-status.dto.js';
 import { OverrideSegmentDto } from './dto/override-segment.dto.js';
 import { QueryCaseDto } from './dto/query-case.dto.js';
-import { CaseStatusEnum, CampaignStatusEnum } from '@prisma/client';
+import { CaseStatusEnum, CampaignStatusEnum, CasePriorityEnum } from '@prisma/client';
+
+const SLA_HOURS: Record<string, number> = { KRITIK: 2, YUKSEK: 8, ORTA: 24, DUSUK: 72 };
+const PRIORITY_ORDER: Record<string, number> = { DUSUK: 1, ORTA: 2, YUKSEK: 3, KRITIK: 4 };
 
 @Injectable()
 export class CasesService {
@@ -26,6 +29,48 @@ export class CasesService {
     [CaseStatusEnum.YAYINDA]: [CaseStatusEnum.ARSIVLENDI],
     [CaseStatusEnum.ARSIVLENDI]: [],
   };
+
+  // Case §4.2 "Kim Yapabilir" matrisi — geçiş bazlı rol yetkisi
+  private readonly transitionRoles: Record<string, string[]> = {
+    'YENI->ATANDI': ['SUPERVISOR', 'ADMIN'], // Sistem(AI) veya Yönetici
+    'ATANDI->OPTIMIZE_EDILIYOR': ['CAMPAIGN_EXPERT', 'SUPERVISOR', 'ADMIN'],
+    'OPTIMIZE_EDILIYOR->TEST_EDILIYOR': ['CAMPAIGN_EXPERT', 'SUPERVISOR', 'ADMIN'],
+    'TEST_EDILIYOR->OPTIMIZE_EDILIYOR': ['CAMPAIGN_EXPERT', 'SUPERVISOR', 'ADMIN'], // A/B testi sonucu
+    'OPTIMIZE_EDILIYOR->TAMAMLANDI': ['CAMPAIGN_EXPERT', 'SUPERVISOR', 'ADMIN'],
+    'TEST_EDILIYOR->TAMAMLANDI': ['CAMPAIGN_EXPERT', 'SUPERVISOR', 'ADMIN'],
+    'TAMAMLANDI->YAYINDA': ['SUPERVISOR', 'ADMIN'], // Yönetici onayı
+  };
+
+  /**
+   * Kalan SLA bilgisini hesaplar (Case §4.4 — uzman ve yönetici ekranında görünür).
+   */
+  private withSla<T extends { slaDeadline: Date; slaBreached: boolean; completedAt?: Date | null; priority: string }>(c: T) {
+    const now = Date.now();
+    const deadline = new Date(c.slaDeadline).getTime();
+    const remainingMs = c.completedAt ? 0 : deadline - now;
+    const remainingHours = Math.round((remainingMs / 3600000) * 10) / 10;
+    let slaStatus: 'OK' | 'WARNING' | 'BREACHED' | 'COMPLETED';
+    if (c.completedAt) slaStatus = 'COMPLETED';
+    else if (remainingMs <= 0 || c.slaBreached) slaStatus = 'BREACHED';
+    else {
+      const totalMs = (SLA_HOURS[c.priority] ?? 24) * 3600000;
+      slaStatus = remainingMs <= totalMs * 0.2 ? 'WARNING' : 'OK';
+    }
+    return { ...c, slaRemainingMs: Math.max(0, remainingMs), slaRemainingHours: Math.max(0, remainingHours), slaStatus };
+  }
+
+  /**
+   * Segmente göre öncelik türetir (Case §4.3): RISKLI_KAYIP/YUKSEK_DEGER minimum YUKSEK, BELIRSIZ → ORTA.
+   */
+  private derivePriority(segment: string, current?: string): CasePriorityEnum {
+    if (segment === 'BELIRSIZ') return CasePriorityEnum.ORTA;
+    let p: CasePriorityEnum =
+      current && (CasePriorityEnum as any)[current] ? (current as CasePriorityEnum) : CasePriorityEnum.ORTA;
+    if ((segment === 'RISKLI_KAYIP' || segment === 'YUKSEK_DEGER') && PRIORITY_ORDER[p] < PRIORITY_ORDER.YUKSEK) {
+      p = CasePriorityEnum.YUKSEK;
+    }
+    return p;
+  }
 
   async findAll(query: QueryCaseDto) {
     const page = query.page || 1;
@@ -58,7 +103,7 @@ export class CasesService {
     ]);
 
     return {
-      items,
+      items: items.map((c) => this.withSla(c as any)),
       meta: {
         total,
         page,
@@ -83,7 +128,7 @@ export class CasesService {
       throw new NotFoundException(`Optimizasyon vakası bulunamadı (ID: ${id})`);
     }
 
-    return optCase;
+    return this.withSla(optCase as any);
   }
 
   async assignExpert(caseId: string, dto: AssignExpertDto, userId: string) {
@@ -143,7 +188,7 @@ export class CasesService {
     return updated;
   }
 
-  async updateStatus(caseId: string, dto: UpdateCaseStatusDto, userId: string) {
+  async updateStatus(caseId: string, dto: UpdateCaseStatusDto, userId: string, role: string) {
     const optCase = await this.findOne(caseId);
     const currentStatus = optCase.status;
     const targetStatus = dto.status;
@@ -152,11 +197,21 @@ export class CasesService {
       return optCase;
     }
 
-    // State Machine Geçiş Doğrulaması
-    const allowed = this.validTransitions[currentStatus] || [];
+    // State Machine Geçiş Doğrulaması (kural dışı → HTTP 422)
+    const allowed = this.validTransitions[currentStatus as CaseStatusEnum] || [];
     if (!allowed.includes(targetStatus)) {
       throw new UnprocessableEntityException(
         `Geçersiz durum geçişi (HTTP 422): '${currentStatus}' durumundan '${targetStatus}' durumuna geçilemez. (İzin verilenler: ${allowed.join(', ') || 'Yok'})`,
+      );
+    }
+
+    // Case §4.2 "Kim Yapabilir" — geçiş bazlı rol kontrolü (yetkisiz → 403)
+    const key = `${currentStatus}->${targetStatus}`;
+    const allowedRoles =
+      targetStatus === CaseStatusEnum.ARSIVLENDI ? ['SUPERVISOR', 'ADMIN'] : this.transitionRoles[key];
+    if (allowedRoles && !allowedRoles.includes(role)) {
+      throw new ForbiddenException(
+        `Bu durum geçişini ('${key}') gerçekleştirme yetkiniz yok. İzinli roller: ${allowedRoles.join(', ')}.`,
       );
     }
 
@@ -240,18 +295,40 @@ export class CasesService {
   async overrideSegment(caseId: string, dto: OverrideSegmentDto, userId: string) {
     const optCase = await this.findOne(caseId);
     const originalSegment = optCase.segment;
+    const originalPriority = optCase.priority;
+
+    const VALID_SEGMENTS = ['YUKSEK_DEGER', 'RISKLI_KAYIP', 'YENI_ABONE', 'PASIF', 'BELIRSIZ'];
+    if (!VALID_SEGMENTS.includes(dto.segment)) {
+      throw new BadRequestException(`Geçersiz segment. İzinli değerler: ${VALID_SEGMENTS.join(', ')}`);
+    }
 
     if (originalSegment === dto.segment) {
       return optCase;
     }
+
+    // Yeni segmente göre öncelik yeniden hesaplanır (RISKLI_KAYIP min YUKSEK).
+    const newPriority = this.derivePriority(dto.segment, originalPriority);
+    // SLA vaka oluşturma anından sayılır (Case §4.4) → deadline = createdAt + yeni öncelik süresi.
+    const newDeadline = new Date(
+      new Date(optCase.createdAt).getTime() + (SLA_HOURS[newPriority] ?? 24) * 3600000,
+    );
 
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.optimizationCase.update({
         where: { id: caseId },
         data: {
           segment: dto.segment,
+          priority: newPriority,
+          slaDeadline: newDeadline,
+          slaBreached: newDeadline.getTime() <= Date.now(),
           isAiMisclassified: true,
         },
+      });
+
+      // Case §4.3: kampanya hedef segmentini de senkronize et
+      await tx.campaign.update({
+        where: { id: optCase.campaignId },
+        data: { targetSegment: dto.segment as any },
       });
 
       await tx.campaignHistory.create({
@@ -260,18 +337,20 @@ export class CasesService {
           fromStatus: optCase.status,
           toStatus: optCase.status,
           changedBy: userId,
-          note: `Segment manuel değiştirildi: '${originalSegment}' -> '${dto.segment}'. Neden: ${dto.reason}`,
+          note: `Segment manuel değiştirildi: '${originalSegment}' -> '${dto.segment}' (öncelik: ${originalPriority} -> ${newPriority}). Neden: ${dto.reason}`,
         },
       });
 
       return result;
     });
 
-    // AI Service için segment.changed event'i
+    // AI Service için segment.changed event'i (doğruluk metriği için)
     await this.rabbitmq.publishEvent('segment.changed', {
       case_id: optCase.id,
+      campaign_id: optCase.campaignId,
       original_segment: originalSegment,
       corrected_segment: dto.segment,
+      corrected_priority: newPriority,
       corrected_by: userId,
       reason: dto.reason,
       is_ai_misclassified: true,

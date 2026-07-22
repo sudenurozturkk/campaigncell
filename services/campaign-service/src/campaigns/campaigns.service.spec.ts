@@ -13,11 +13,14 @@ describe('CampaignsService (CRUD & Degradation)', () => {
     campaign: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
-      count: jest.fn(),
+      count: jest.fn().mockResolvedValue(0),
       create: jest.fn(),
       update: jest.fn(),
     },
     optimizationCase: {
+      create: jest.fn(),
+    },
+    campaignAssignment: {
       create: jest.fn(),
     },
     campaignHistory: {
@@ -46,7 +49,19 @@ describe('CampaignsService (CRUD & Degradation)', () => {
     jest.clearAllMocks();
   });
 
-  it('should create campaign with automatic case and emit campaign.created event', async () => {
+  it('should create campaign with automatic case and emit campaign.created event (AI available)', async () => {
+    // AI Service erişilebilir → gerçek tahmin döner
+    (global as any).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        recommendation_score: 0.82,
+        conversion_probability: 0.61,
+        predicted_segment: 'YUKSEK_DEGER',
+        predicted_priority: 'YUKSEK',
+        reasoning: 'Yüksek kullanım profili',
+        recommended_expert: null,
+      }),
+    });
     mockPrisma.campaign.findUnique.mockResolvedValue(null);
     mockPrisma.campaign.create.mockResolvedValue({
       id: 'camp-123',
@@ -83,7 +98,9 @@ describe('CampaignsService (CRUD & Degradation)', () => {
     }));
   });
 
-  it('should handle degradation fallback if targetSegment is BELIRSIZ', async () => {
+  it('should degrade to BELIRSIZ + MANUAL_OPTIMIZATION_REQUIRED when AI Service is unreachable', async () => {
+    // AI Service erişilemez → degradation (Case §2.2 bağımsızlık)
+    (global as any).fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED ai-service:8000'));
     mockPrisma.campaign.findUnique.mockResolvedValue(null);
     mockPrisma.campaign.create.mockResolvedValue({
       id: 'camp-fallback',
