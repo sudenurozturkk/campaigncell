@@ -74,7 +74,7 @@ const ROLE_CONFIG = {
     links: [
       { href: '/dashboard/admin?tab=users', label: 'Kullanıcı Yönetimi', icon: UserCheck },
       { href: '/dashboard/admin?tab=audit', label: 'Audit Loglar', icon: History },
-      { href: '/dashboard/supervisor?tab=overview', label: 'Sistem Performansı', icon: BarChart3 },
+      { href: '/dashboard/admin?tab=system', label: 'Sistem Performansı', icon: BarChart3 },
     ] as SidebarLink[],
   },
   ADMIN: {
@@ -84,7 +84,7 @@ const ROLE_CONFIG = {
     links: [
       { href: '/dashboard/admin?tab=users', label: 'Kullanıcı Yönetimi', icon: UserCheck },
       { href: '/dashboard/admin?tab=audit', label: 'Audit Loglar', icon: History },
-      { href: '/dashboard/supervisor?tab=overview', label: 'Sistem Performansı', icon: BarChart3 },
+      { href: '/dashboard/admin?tab=system', label: 'Sistem Performansı', icon: BarChart3 },
     ] as SidebarLink[],
   },
 };
