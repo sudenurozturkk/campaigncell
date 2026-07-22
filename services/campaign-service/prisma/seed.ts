@@ -1,93 +1,92 @@
-import { PrismaClient, CampaignTypeEnum, TargetSegmentEnum, CampaignStatusEnum, CasePriorityEnum, CaseStatusEnum } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import {
+  PrismaClient,
+  CampaignTypeEnum,
+  TargetSegmentEnum,
+  CampaignStatusEnum,
+  CasePriorityEnum,
+  CaseStatusEnum
+} from '@prisma/client';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Seeding campaign database...');
+  console.log('Seeding Campaign Service Database...');
 
-  // 1. Initial Segments
-  const defaultSegments = [
-    { name: 'YUKSEK_DEGER', description: 'Yüksek ARPU veren sadık müşteriler' },
-    { name: 'RISKLI_KAYIP', description: 'Churn riski yüksek müşteriler' },
-    { name: 'YENI_ABONE', description: 'Son 30 günde katılan yeni aboneler' },
-    { name: 'PASIF', description: 'Kullanım oranı düşük aboneler' },
-    { name: 'BELIRSIZ', description: 'AI taraflı segmentasyonu tamamlanmamış aboneler' },
-  ];
-
-  for (const seg of defaultSegments) {
-    await prisma.segment.upsert({
-      where: { name: seg.name },
-      update: { description: seg.description },
-      create: seg,
-    });
-  }
-
-  // 2. Demo Campaigns & Cases
-  const mockUserId = randomUUID();
-  const mockExpertId = randomUUID();
-
-  const mockCampaigns = [
-    {
+  // Create Sample Campaign
+  const campaign1 = await prisma.campaign.upsert({
+    where: { code: 'CMP-2026-000101' },
+    update: {},
+    create: {
       code: 'CMP-2026-000101',
-      name: 'Yüksek Değerli Abone İnternet Fırsatı',
-      description: 'Sadık 5G kullanıcılarına özel 20GB Ek Paket hediyesi',
+      name: 'Yüksek Değerli Abone 20GB Ek Paket',
+      description: 'Yüksek veri kullanan müşteriler için kişiselleştirilmiş %30 indirimli ek paket teklifi.',
       type: CampaignTypeEnum.EK_PAKET,
-      discountPercent: 25.0,
+      discountPercent: 30.00,
       targetSegment: TargetSegmentEnum.YUKSEK_DEGER,
       status: CampaignStatusEnum.ACTIVE,
-      aiRecommendationScore: 0.92,
-      aiConversionProbability: 0.78,
-      createdBy: mockUserId,
+      aiRecommendationScore: 0.940,
+      aiConversionProbability: 0.850,
+      createdBy: 'a0000000-0000-0000-0000-000000000001',
     },
-    {
+  });
+
+  // Create Optimization Case
+  await prisma.optimizationCase.upsert({
+    where: { caseCode: 'CMP-2026-000101' },
+    update: {},
+    create: {
+      caseCode: 'CMP-2026-000101',
+      campaignId: campaign1.id,
+      segment: 'YUKSEK_DEGER',
+      priority: CasePriorityEnum.YUKSEK,
+      status: CaseStatusEnum.OPTIMIZE_EDILIYOR,
+      aiScore: 0.940,
+      aiConversionProb: 0.850,
+      aiReasoning: 'AI Analizi: Aylık 35 GB yüksek veri tüketimi ve 24 aylık sadakat baz alınarak hazırlanmıştır.',
+      isAiMisclassified: false,
+      optimizationNote: 'Ekstra %5 sadakat indirimi tanımlandı.',
+      slaDeadline: new Date(Date.now() + 6 * 60 * 60 * 1000),
+      slaBreached: false,
+    },
+  });
+
+  // Churn Prevention Case
+  const campaign2 = await prisma.campaign.upsert({
+    where: { code: 'CMP-2026-000102' },
+    update: {},
+    create: {
       code: 'CMP-2026-000102',
-      name: 'Churn Önleme Cihaz Teklifi',
-      description: 'Rakibe geçme riski olan aboneye akıllı telefon taahhüt indirimi',
+      name: 'Churn Önleme Cihaz Fırsatı',
+      description: 'Riskli gruptaki aboneler için özel 5G akıllı cihaz ve taahhüt yenileme teklifi.',
       type: CampaignTypeEnum.CIHAZ_FIRSATI,
-      discountPercent: 40.0,
+      discountPercent: 40.00,
       targetSegment: TargetSegmentEnum.RISKLI_KAYIP,
       status: CampaignStatusEnum.MANUAL_OPTIMIZATION_REQUIRED,
-      aiRecommendationScore: 0.85,
-      aiConversionProbability: 0.65,
-      createdBy: mockUserId,
+      aiRecommendationScore: 0.720,
+      aiConversionProbability: 0.650,
+      createdBy: 'a0000000-0000-0000-0000-000000000001',
     },
-  ];
+  });
 
-  for (const campData of mockCampaigns) {
-    const existing = await prisma.campaign.findUnique({ where: { code: campData.code } });
-    if (!existing) {
-      const created = await prisma.campaign.create({ data: campData });
+  await prisma.optimizationCase.upsert({
+    where: { caseCode: 'CMP-2026-000102' },
+    update: {},
+    create: {
+      caseCode: 'CMP-2026-000102',
+      campaignId: campaign2.id,
+      segment: 'RISKLI_KAYIP',
+      priority: CasePriorityEnum.KRITIK,
+      status: CaseStatusEnum.YENI,
+      aiScore: 0.720,
+      aiConversionProb: 0.650,
+      aiReasoning: 'AI Analizi: Cihaz değişim dönemi ve rakip operatör geçiş riski yüksek.',
+      isAiMisclassified: false,
+      slaDeadline: new Date(Date.now() + 1.5 * 60 * 60 * 1000),
+      slaBreached: false,
+    },
+  });
 
-      const slaDeadline = new Date(Date.now() + 48 * 3600 * 1000);
-      const optCase = await prisma.optimizationCase.create({
-        data: {
-          caseCode: campData.code,
-          campaignId: created.id,
-          segment: campData.targetSegment,
-          priority: campData.targetSegment === TargetSegmentEnum.RISKLI_KAYIP ? CasePriorityEnum.KRITIK : CasePriorityEnum.YUKSEK,
-          status: CaseStatusEnum.ATANDI,
-          assignedExpertId: mockExpertId,
-          aiScore: campData.aiRecommendationScore,
-          aiConversionProb: campData.aiConversionProbability,
-          aiReasoning: 'Müşteri profili ve geçmiş kampanya etkileşim skorlarına dayanmaktadır.',
-          slaDeadline,
-        },
-      });
-
-      await prisma.campaignHistory.create({
-        data: {
-          caseId: optCase.id,
-          fromStatus: CaseStatusEnum.YENI,
-          toStatus: CaseStatusEnum.ATANDI,
-          changedBy: mockUserId,
-          note: 'Seed scripti ile vaka açıldı ve uzmana atandı.',
-        },
-      });
-    }
-  }
-
-  console.log('Seeding completed successfully!');
+  console.log('Campaign Service Seeding Completed Successfully.');
 }
 
 main()
