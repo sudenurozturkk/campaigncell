@@ -157,7 +157,13 @@ function SupervisorDashboardContent() {
   };
 
   return (
-    <DashboardShell role="supervisor" userName="Süpervizör Yönetici" userDetail="Pazarlama ve Operasyon Yöneticisi">
+    <DashboardShell
+      role="supervisor"
+      userName="Süpervizör Yönetici"
+      userDetail="Pazarlama ve Operasyon Yöneticisi"
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    >
       <div className="space-y-6">
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-4">

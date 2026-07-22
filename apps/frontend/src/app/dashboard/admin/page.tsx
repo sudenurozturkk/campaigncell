@@ -178,7 +178,12 @@ function AdminDashboardContent() {
   const expertiseTags = ['CHURN_PREVENTION', 'RISKLI_KAYIP', 'YUKSEK_DEGER', 'YENI_ABONE', 'TARIFE_YUKSELTME', 'EK_PAKET', 'CIHAZ_FIRSATI', 'SADAKAT'];
 
   return (
-    <DashboardShell role="ADMIN" userName="Sistem Yöneticisi">
+    <DashboardShell
+      role="ADMIN"
+      userName="Sistem Yöneticisi"
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    >
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">

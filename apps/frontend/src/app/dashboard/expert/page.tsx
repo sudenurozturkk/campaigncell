@@ -148,7 +148,13 @@ function ExpertDashboardContent() {
   };
 
   return (
-    <DashboardShell role="expert" userName="Ahmet Yılmaz" userDetail="Kampanya Uzmanı • İstanbul Bölgesi">
+    <DashboardShell
+      role="expert"
+      userName="Ahmet Yılmaz"
+      userDetail="Kampanya Uzmanı • İstanbul Bölgesi"
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    >
       <div className="space-y-6">
         {/* Top bar */}
         <div className="flex flex-wrap items-center justify-between gap-4">

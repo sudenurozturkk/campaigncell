@@ -24,6 +24,8 @@ interface DashboardShellProps {
   role: 'subscriber' | 'expert' | 'supervisor' | 'ADMIN' | 'admin';
   userName: string;
   userDetail?: string;
+  activeTab?: string;
+  onTabChange?: (tab: any) => void;
 }
 
 interface RealtimeToast {
@@ -87,7 +89,7 @@ const ROLE_CONFIG = {
   },
 };
 
-export default function DashboardShell({ children, role, userName, userDetail = 'Platform' }: DashboardShellProps) {
+export default function DashboardShell({ children, role, userName, userDetail = 'Platform', activeTab, onTabChange }: DashboardShellProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentTab = searchParams.get('tab');
@@ -215,16 +217,24 @@ export default function DashboardShell({ children, role, userName, userDetail = 
             const linkBase = link.href.split('?')[0];
             const linkTab = new URLSearchParams(link.href.split('?')[1] || '').get('tab');
             
-            // It is active if the base path matches AND (the tabs match OR it's the overview tab and no tab is selected)
-            const isActive = pathname === linkBase && 
-              (linkTab === currentTab || (!currentTab && linkTab === 'overview') || (!linkTab && !currentTab));
+            // Priority to activeTab prop if passed, otherwise fall back to searchParams / pathname
+            const isActive = activeTab
+              ? (linkTab === activeTab || (!linkTab && activeTab === 'overview'))
+              : (pathname === linkBase && (linkTab === currentTab || (!currentTab && linkTab === 'overview') || (!linkTab && !currentTab)));
 
             const Icon = link.icon;
             return (
               <Link
                 key={link.href + link.label}
                 href={link.href}
-                onClick={() => setMobileOpen(false)}
+                onClick={(e) => {
+                  setMobileOpen(false);
+                  if (linkTab && onTabChange && pathname === linkBase) {
+                    e.preventDefault();
+                    onTabChange(linkTab);
+                    window.history.pushState(null, '', link.href);
+                  }
+                }}
                 className={`flex items-center space-x-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
                   ${isActive
                     ? 'bg-turkcell-blue/10 dark:bg-turkcell-yellow/10 text-turkcell-blue dark:text-turkcell-yellow border border-turkcell-blue/20 dark:border-turkcell-yellow/15 shadow-sm'

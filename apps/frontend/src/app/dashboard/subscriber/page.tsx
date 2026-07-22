@@ -101,7 +101,13 @@ function SubscriberDashboardContent() {
   const acceptedOffers = offers.filter(o => o.status === 'ACCEPTED');
 
   return (
-    <DashboardShell role="subscriber" userName="Ahmet Yılmaz" userDetail="0555 111 22 33 • Turkcell Super Paket">
+    <DashboardShell
+      role="subscriber"
+      userName="Ahmet Yılmaz"
+      userDetail="0555 111 22 33 • Turkcell Super Paket"
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    >
       <div className="space-y-6">
         {/* Header banner */}
         <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-sm">
