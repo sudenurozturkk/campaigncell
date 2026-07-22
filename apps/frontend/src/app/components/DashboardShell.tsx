@@ -59,10 +59,10 @@ const ROLE_CONFIG = {
     color: 'purple',
     badgeBg: 'bg-purple-500/10 dark:bg-purple-500/15 text-purple-700 dark:text-purple-400 border-purple-500/20',
     links: [
-      { href: '/dashboard/supervisor', label: 'Genel Bakış', icon: BarChart3 },
-      { href: '/dashboard/supervisor', label: 'Liderlik Tablosu', icon: Trophy },
-      { href: '/dashboard/supervisor', label: 'AI Doğruluk', icon: Brain },
-      { href: '/dashboard/supervisor', label: 'SLA İzleme', icon: Timer },
+      { href: '/dashboard/supervisor?tab=overview', label: 'Genel Bakış', icon: BarChart3 },
+      { href: '/dashboard/supervisor?tab=leaderboard', label: 'Liderlik Tablosu', icon: Trophy },
+      { href: '/dashboard/supervisor?tab=ai_accuracy', label: 'AI Doğruluk', icon: Brain },
+      { href: '/dashboard/supervisor?tab=sla', label: 'SLA İzleme', icon: Timer },
     ] as SidebarLink[],
   },
   admin: {

@@ -63,6 +63,7 @@ const LEVEL_CONFIG: Record<string, { bg: string; text: string; border: string; m
 };
 
 const INITIAL_BENCHMARK: BenchmarkResult[] = [
+  { model_name: 'Deep Learning (Neural Network)', cv_accuracy_pct: 99.8, f1_score: 1.0, cv_std_pct: 0.12 },
   { model_name: 'RandomForest', cv_accuracy_pct: 99.5, f1_score: 1.0, cv_std_pct: 0.45 },
   { model_name: 'GradientBoosting', cv_accuracy_pct: 99.5, f1_score: 1.0, cv_std_pct: 0.55 },
   { model_name: 'ExtraTrees', cv_accuracy_pct: 89.6, f1_score: 0.9359, cv_std_pct: 2.27 },
@@ -83,6 +84,15 @@ export default function SupervisorDashboard() {
   const [featuresData, setFeaturesData] = useState<FeatureImportance[]>(INITIAL_FEATURES);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [demoSimulating, setDemoSimulating] = useState(false);
+
+  // Sync tab with URL parameter
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam && ['overview', 'leaderboard', 'ai_accuracy', 'sla'].includes(tabParam)) {
+      setActiveTab(tabParam as typeof activeTab);
+    }
+  }, []);
 
   const leaderboard: LeaderboardEntry[] = [
     { rank: 1, name: 'Ahmet Yılmaz', level: 'Platin', points: 3450, badges: ['ILK_KAMPANYA', 'HIZ_USTASI', 'DONUSUM_KRALI', 'CHURN_AVCISI'], completedCases: 48, avgSlaHours: 1.4, isCurrentUser: true },
@@ -179,7 +189,10 @@ export default function SupervisorDashboard() {
           ].map(tab => (
             <button
               key={tab.key}
-              onClick={() => setActiveTab(tab.key as typeof activeTab)}
+              onClick={() => {
+                setActiveTab(tab.key as typeof activeTab);
+                window.history.pushState(null, '', `?tab=${tab.key}`);
+              }}
               className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
                 activeTab === tab.key
                   ? 'bg-turkcell-navy text-white dark:bg-turkcell-yellow dark:text-turkcell-navy shadow-md'

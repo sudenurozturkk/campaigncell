@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Any, Tuple, List
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, ExtraTreesClassifier
+from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
 from sklearn.model_selection import cross_val_score
 from app.ml.dataset_generator import generate_synthetic_telecom_dataset
@@ -128,6 +129,7 @@ class PredictorEngine:
         y = df['target_segment']
 
         models = {
+            "Deep Learning (Neural Network)": MLPClassifier(hidden_layer_sizes=(64, 32), max_iter=500, random_state=42),
             "RandomForest": RandomForestClassifier(n_estimators=100, max_depth=8, random_state=42),
             "GradientBoosting": GradientBoostingClassifier(n_estimators=100, learning_rate=0.1, random_state=42),
             "ExtraTrees": ExtraTreesClassifier(n_estimators=100, max_depth=8, random_state=42),
