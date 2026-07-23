@@ -109,7 +109,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#050810] flex flex-col justify-between px-4 py-8 transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col justify-between px-4 py-8 transition-colors duration-300">
       {/* Top Header */}
       <div className="max-w-md w-full mx-auto flex items-center justify-between">
         <Link href="/" className="inline-flex items-center space-x-2.5 group">
@@ -125,7 +125,7 @@ export default function RegisterPage() {
 
       {/* Main Form Card */}
       <div className="w-full max-w-md mx-auto my-auto py-6">
-        <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
           <div>
             <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-turkcell-blue/10 dark:bg-turkcell-yellow/15 text-turkcell-blue dark:text-turkcell-yellow text-xs font-bold mb-2">
               <UserCheck className="w-3.5 h-3.5" />
@@ -250,7 +250,7 @@ export default function RegisterPage() {
             </div>
 
             {/* Live Password Policy Checklist (Case Section 3.2 Spec) */}
-            <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1 text-[11px]">
+            <div className="p-3 bg-slate-50 dark:bg-slate-700/40 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1 text-[11px]">
               <span className="font-bold text-slate-700 dark:text-slate-300 block mb-1">Turkcell Şifre Politikası Gereksinimleri:</span>
               <div className="grid grid-cols-2 gap-1 font-medium">
                 <div className={isMinLength ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-slate-400'}>
@@ -285,7 +285,7 @@ export default function RegisterPage() {
           </form>
 
           {/* Footer Link */}
-          <div className="text-center pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="text-center pt-2 border-t border-slate-100 dark:border-slate-700">
             <span className="text-xs text-slate-500 font-medium">Zaten bir hesabınız var mı? </span>
             <Link href="/login" className="text-xs text-turkcell-blue dark:text-turkcell-yellow font-extrabold hover:underline">
               Giriş Yapın
@@ -297,7 +297,7 @@ export default function RegisterPage() {
       {/* OTP Verification Modal (Case Spec 3.1 & 3.2 - 2FA Security) */}
       {showOtpModal && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-sm w-full space-y-5 shadow-2xl animate-scale-in">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 sm:p-8 max-w-sm w-full space-y-5 shadow-2xl animate-scale-in">
             <div className="text-center space-y-2">
               <div className="w-12 h-12 rounded-2xl bg-turkcell-yellow/20 text-turkcell-navy dark:text-turkcell-yellow flex items-center justify-center mx-auto shadow-md">
                 <ShieldCheck className="w-6 h-6" />

@@ -292,7 +292,7 @@ function SupervisorDashboardContent() {
         </div>
 
         {/* Tabs */}
-        <div className="flex space-x-1 bg-slate-200/60 dark:bg-slate-900/60 p-1 rounded-xl w-fit border border-slate-300/40 dark:border-slate-800">
+        <div className="flex space-x-1 bg-slate-200/60 dark:bg-slate-700/40 p-1 rounded-xl w-fit border border-slate-300/40 dark:border-slate-700">
           {[
             { key: 'overview', label: 'Genel Bakış', icon: Activity },
             { key: 'leaderboard', label: 'Liderlik Tablosu', icon: Trophy },
@@ -327,7 +327,7 @@ function SupervisorDashboardContent() {
                 { label: 'AI Tahmin Doğruluğu', val: '%88.5', desc: '1420 Tahmin', icon: Brain, color: 'text-turkcell-blue dark:text-turkcell-yellow' },
                 { label: 'Ortalama Dönüşüm Artışı', val: '+%18.4', desc: 'A/B Test Ortalama', icon: TrendingUp, color: 'text-purple-600 dark:text-purple-400' },
               ].map((kpi, i) => (
-                <div key={i} className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-2">
+                <div key={i} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-500 uppercase">{kpi.label}</span>
                     <kpi.icon className={`w-5 h-5 ${kpi.color}`} />
@@ -339,7 +339,7 @@ function SupervisorDashboardContent() {
             </div>
 
             {/* Segment Breakdown */}
-            <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm space-y-4">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Segment Dağılımı ve Dönüşüm Oranları</h3>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {[
@@ -348,7 +348,7 @@ function SupervisorDashboardContent() {
                   { name: 'YENİ ABONE', total: 320, rate: '%28', color: 'bg-blue-500' },
                   { name: 'PASİF ABONE', total: 270, rate: '%18', color: 'bg-amber-500' },
                 ].map((seg, idx) => (
-                  <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
+                  <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2">
                     <div className="flex items-center space-x-2">
                       <span className={`w-2.5 h-2.5 rounded-full ${seg.color}`} />
                       <span className="text-xs font-extrabold text-slate-900 dark:text-white">{seg.name}</span>
@@ -364,8 +364,8 @@ function SupervisorDashboardContent() {
 
         {/* Leaderboard Tab */}
         {activeTab === 'leaderboard' && (
-          <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Uzman Puan & Rozet Sıralaması</h3>
                 <p className="text-xs text-slate-500 mt-0.5 font-medium">Tamamlanan vaka, SLA süresi ve dönüşüm başarısına göre puanlanan liderlik tablosu</p>
@@ -374,7 +374,7 @@ function SupervisorDashboardContent() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-left">
+                  <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 text-left">
                     {['Sıra', 'Uzman', 'Seviye', 'Toplam Puan', 'Rozetler', 'Tamamlanan', 'Ort. SLA'].map(h => (
                       <th key={h} className="px-4 py-3 text-[11px] text-slate-500 font-bold uppercase tracking-wider">{h}</th>
                     ))}
@@ -426,7 +426,7 @@ function SupervisorDashboardContent() {
           <div className="space-y-6">
             {/* Canlı AI Doğruluk Metrikleri (gerçek /accuracy endpoint) */}
             {liveAccuracy && (
-              <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-5">
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm space-y-5">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-base font-black text-slate-900 dark:text-white flex items-center space-x-2">
@@ -449,7 +449,7 @@ function SupervisorDashboardContent() {
                     { label: 'Yanlış Sınıflama', val: liveAccuracy.misclassified_count, color: 'text-rose-600 dark:text-rose-400' },
                     { label: 'Düzeltilen (Feedback)', val: liveAccuracy.corrected_predictions_count, color: 'text-purple-600 dark:text-purple-400' },
                   ].map((m, i) => (
-                    <div key={i} className="p-3 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl">
+                    <div key={i} className="p-3 bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 rounded-xl">
                       <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{m.label}</div>
                       <div className={`text-xl font-black ${m.color}`}>{m.val}</div>
                     </div>
@@ -479,7 +479,7 @@ function SupervisorDashboardContent() {
               </div>
             )}
 
-            <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm space-y-6">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-base font-black text-slate-900 dark:text-white">Jüri İçin Model Karşılaştırma & Benchmark (Cross-Validation)</h3>
@@ -495,7 +495,7 @@ function SupervisorDashboardContent() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-left">
+                    <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 text-left">
                       {['Algoritma', '5-Fold CV Doğruluğu', 'Weighted F1-Score', 'Standart Sapma', 'Durum'].map(h => (
                         <th key={h} className="px-4 py-3 text-[11px] text-slate-500 font-bold uppercase tracking-wider">{h}</th>
                       ))}
@@ -530,7 +530,7 @@ function SupervisorDashboardContent() {
             </div>
 
             {/* Feature Importance Weights (SHAP / XAI) */}
-            <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm space-y-4">
               <div>
                 <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Açıklanabilir AI (XAI) Özellik Önem Ağırlıkları (Feature Importance)</h3>
                 <p className="text-xs text-slate-500 mt-1 font-medium">Modelin öneri ve segment kararını en çok etkileyen telko parametreleri</p>
@@ -558,15 +558,15 @@ function SupervisorDashboardContent() {
 
         {/* SLA Tab */}
         {activeTab === 'sla' && (
-          <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">SLA Süresi Yaklaşan & İhlal Edilmiş Vakalar</h3>
               <p className="text-xs text-slate-500 mt-0.5 font-medium">KRİTİK (2 Saat), YÜKSEK (8 Saat), ORTA (24 Saat) SLA kurallarına göre izleme</p>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-left">
+                  <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30 text-left">
                     {['Vaka Kodu', 'Kampanya Adı', 'Öncelik', 'Durum', 'Kalan Süre', 'Atanan Uzman'].map(h => (
                       <th key={h} className="px-4 py-3 text-[11px] text-slate-500 font-bold uppercase tracking-wider">{h}</th>
                     ))}
@@ -611,7 +611,7 @@ function SupervisorDashboardContent() {
 export default function SupervisorDashboard() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-slate-50 dark:bg-[#050810] flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-turkcell-blue animate-spin"></div>
       </div>
     }>

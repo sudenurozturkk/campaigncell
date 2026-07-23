@@ -24,7 +24,9 @@ export class AuthService {
   private readonly OTP_RATE_LIMIT = 3; // Max 3 OTP per GSM per hour
   private readonly OTP_EXPIRY_SECONDS = 180; // 3 minutes
   private readonly SIMULATION_OTP = process.env.SIMULATION_OTP_CODE || '1234';
-  private readonly ENABLE_SIMULATION_OTP = process.env.NODE_ENV !== 'production';
+  // Case §3.1 gereği simülasyon kodu (1234) demo ortamında varsayılan olarak AÇIK.
+  // Gerçek production'da OTP_SIMULATION_ENABLED=false ile kapatılır.
+  private readonly ENABLE_SIMULATION_OTP = (process.env.OTP_SIMULATION_ENABLED ?? 'true') !== 'false';
   private readonly refreshSecret =
     process.env.JWT_REFRESH_SECRET ||
     (process.env.JWT_SECRET || 'super-secret-jwt-key') + '_refresh';

@@ -175,7 +175,7 @@ function ExpertDashboardContent() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Case List Column */}
           <div className="lg:col-span-5 space-y-4">
-            <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Atanan Vakalarım</span>
                 <span className="text-xs font-extrabold text-turkcell-blue dark:text-turkcell-yellow">{cases.length} Vaka</span>
@@ -191,7 +191,7 @@ function ExpertDashboardContent() {
                       className={`p-4 rounded-xl border transition-all cursor-pointer ${
                         isSelected
                           ? 'bg-blue-50/80 dark:bg-slate-900 border-turkcell-blue dark:border-turkcell-yellow/60 shadow-md'
-                          : 'bg-white dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                          : 'bg-white dark:bg-slate-900/40 border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-700'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
@@ -215,9 +215,9 @@ function ExpertDashboardContent() {
           {/* Case Detail Column */}
           <div className="lg:col-span-7">
             {selectedCase ? (
-              <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-6">
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm space-y-6">
                 {/* Header */}
-                <div className="flex flex-wrap items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 gap-2">
+                <div className="flex flex-wrap items-center justify-between border-b border-slate-100 dark:border-slate-700 pb-4 gap-2">
                   <div>
                     <span className="font-mono text-xs font-bold text-turkcell-blue dark:text-turkcell-yellow">{selectedCase.caseCode}</span>
                     <h2 className="text-lg font-black text-slate-900 dark:text-white mt-0.5">{selectedCase.campaignName}</h2>
@@ -238,7 +238,7 @@ function ExpertDashboardContent() {
                           <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg border whitespace-nowrap transition-all ${
                             isCurrent
                               ? 'bg-turkcell-navy text-white dark:bg-turkcell-yellow dark:text-turkcell-navy border-turkcell-navy dark:border-turkcell-yellow shadow-sm'
-                              : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400'
+                              : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-400'
                           }`}>
                             {st}
                           </span>
@@ -250,7 +250,7 @@ function ExpertDashboardContent() {
                 </div>
 
                 {/* Status Transition Action Box */}
-                <div className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+                <div className="p-4 bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
                   <label className="block text-xs font-bold text-slate-900 dark:text-white">Durum Geçişi İlerleme</label>
                   <textarea
                     rows={2}
@@ -310,7 +310,7 @@ function ExpertDashboardContent() {
       {/* Modal for Create Campaign */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <h3 className="text-lg font-black text-slate-900 dark:text-white">Yeni Kampanya Oluştur</h3>
             <form onSubmit={handleCreateCampaign} className="space-y-3 text-xs">
               <div>
@@ -378,7 +378,7 @@ function ExpertDashboardContent() {
 export default function ExpertDashboard() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-slate-50 dark:bg-[#050810] flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-amber-500 animate-spin"></div>
       </div>
     }>

@@ -14,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="tr" className="light">
-      <body className="bg-slate-50 dark:bg-[#050810] text-slate-900 dark:text-slate-100 min-h-screen font-sans antialiased selection:bg-turkcell-yellow selection:text-turkcell-navy transition-colors duration-300">
+      <body className="bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 min-h-screen font-sans antialiased selection:bg-turkcell-yellow selection:text-turkcell-navy transition-colors duration-300">
         <ThemeProvider>
           {children}
         </ThemeProvider>

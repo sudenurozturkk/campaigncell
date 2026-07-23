@@ -46,7 +46,7 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
 
 export default function SubscriberProfilePage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50 dark:bg-[#050810]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 dark:bg-slate-900" />}>
       <SubscriberProfilePageInner />
     </Suspense>
   );

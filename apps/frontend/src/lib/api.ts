@@ -275,7 +275,6 @@ class CampaignCellApiClient {
         headers: this.getHeaders(),
         body: JSON.stringify({
           campaignId,
-          subscriberId: 'will-be-set-by-backend',
           response,
           rejectionReason,
           rating,

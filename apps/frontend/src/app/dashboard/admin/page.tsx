@@ -208,7 +208,7 @@ function AdminDashboardContent() {
               { label: 'Abone', value: stats.subscribers, icon: UserCheck, color: 'text-blue-600 dark:text-blue-400' },
               { label: 'Kilitli Hesap', value: stats.lockedAccounts, icon: Lock, color: stats.lockedAccounts > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400' },
             ].map((s, i) => (
-              <div key={i} className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
+              <div key={i} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
                 <s.icon className={`w-5 h-5 ${s.color} mb-2`} />
                 <div className={`text-2xl font-black ${s.color}`}>{s.value}</div>
                 <div className="text-[11px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">{s.label}</div>
@@ -218,7 +218,7 @@ function AdminDashboardContent() {
         )}
 
         {/* Tabs */}
-        <div className="flex space-x-1 bg-slate-200/60 dark:bg-slate-900/60 p-1 rounded-xl w-fit border border-slate-300/40 dark:border-slate-800">
+        <div className="flex space-x-1 bg-slate-200/60 dark:bg-slate-700/40 p-1 rounded-xl w-fit border border-slate-300/40 dark:border-slate-700">
           {[
             { key: 'users', label: 'Kullanıcı Listesi', icon: Users },
             { key: 'create', label: 'Personel Ekle', icon: UserPlus },
@@ -245,9 +245,9 @@ function AdminDashboardContent() {
 
         {/* Users Tab */}
         {activeTab === 'users' && (
-          <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
             {/* Toolbar */}
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-3">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex flex-wrap items-center gap-3">
               <div className="relative flex-1 min-w-[200px] max-w-xs">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
@@ -278,7 +278,7 @@ function AdminDashboardContent() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-800 text-left bg-slate-50/50 dark:bg-slate-900/30">
+                    <tr className="border-b border-slate-100 dark:border-slate-700 text-left bg-slate-50/50 dark:bg-slate-900/30">
                       {['Ad Soyad', 'Rol', 'İletişim', 'Bölge / Uzmanlık', 'Durum', 'Kayıt Tarihi', 'İşlem'].map(h => (
                         <th key={h} className="px-4 py-3 text-[11px] text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">{h}</th>
                       ))}
@@ -366,7 +366,7 @@ function AdminDashboardContent() {
 
         {/* Create User Tab */}
         {activeTab === 'create' && (
-          <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 max-w-2xl shadow-sm">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 max-w-2xl shadow-sm">
             <div className="flex items-center space-x-3 mb-6">
               <div className="w-10 h-10 rounded-xl bg-turkcell-blue/10 dark:bg-turkcell-yellow/10 border border-turkcell-blue/20 dark:border-turkcell-yellow/20 flex items-center justify-center">
                 <UserPlus className="w-5 h-5 text-turkcell-blue dark:text-turkcell-yellow" />
@@ -523,8 +523,8 @@ function AdminDashboardContent() {
 
         {/* Audit Log Tab */}
         {activeTab === 'audit' && (
-          <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm">
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden shadow-sm">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-700">
               <h2 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">Son 50 Güvenlik & İşlem Kaydı (Audit Log)</h2>
               <p className="text-xs text-slate-500 mt-0.5">Giriş denemeleri, rol değişiklikleri, 403 yetkisiz erişimler ve hesap kilitlemeleri</p>
             </div>
@@ -537,7 +537,7 @@ function AdminDashboardContent() {
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                    <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
                       {['Zaman', 'İşlem', 'Kaynak ID', 'IP Adresi', 'Sonuç'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-slate-500 font-bold uppercase tracking-wider text-[10px]">{h}</th>
                       ))}
@@ -580,7 +580,7 @@ function AdminDashboardContent() {
                 { label: 'Mikroservis Health Check', val: '4/4 Servis Aktif', desc: 'Identity, Campaign, AI, Gamification', icon: ShieldCheck, color: 'text-purple-600 dark:text-purple-400' },
                 { label: 'Veritabanı Konteynerleri', val: '4/4 PostgreSQL', desc: 'Database-per-service Mimarisi', icon: Activity, color: 'text-red-600 dark:text-red-400' },
               ].map((kpi, i) => (
-                <div key={i} className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-2">
+                <div key={i} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-500 uppercase">{kpi.label}</span>
                     <kpi.icon className={`w-5 h-5 ${kpi.color}`} />
@@ -591,7 +591,7 @@ function AdminDashboardContent() {
               ))}
             </div>
 
-            <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-sm space-y-4">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Mikroservis ve Altyapı Sağlık Durumu (System Health)</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
@@ -600,7 +600,7 @@ function AdminDashboardContent() {
                   { name: 'Gamification Service', port: '3003', db: 'gamification-db (5436)', status: 'SAĞLIKLI (UP)', uptime: '%100.00' },
                   { name: 'AI Machine Learning', port: '8000', db: 'ai-db (5435)', status: 'SAĞLIKLI (UP)', uptime: '%99.90' },
                 ].map((s, idx) => (
-                  <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
+                  <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-black text-slate-900 dark:text-white">{s.name}</span>
                       <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
@@ -624,7 +624,7 @@ function AdminDashboardContent() {
 export default function AdminDashboard() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-slate-50 dark:bg-[#050810] flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
         <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-red-600 animate-spin"></div>
       </div>
     }>

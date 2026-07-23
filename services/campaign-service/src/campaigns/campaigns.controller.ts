@@ -27,6 +27,33 @@ export class CampaignsController {
     return this.campaignsService.findAll(query);
   }
 
+  /**
+   * Subscriber Endpoints — NOT: Statik path'ler ':id' wildcard'ından ÖNCE tanımlanmalı,
+   * aksi halde 'subscriber' kelimesi id olarak yakalanır (NestJS route sırası).
+   */
+  @Get('subscriber/recommendations')
+  @UseGuards(JwtAuthGuard)
+  getSubscriberRecommendations(
+    @Query() query: GetSubscriberRecommendationsQueryDto,
+    @CurrentUser() user: UserPayload
+  ) {
+    const subscriberId = query.subscriberId || user.userId;
+    return this.campaignsService.getSubscriberRecommendations(subscriberId, query.segment);
+  }
+
+  @Post('subscriber/feedback')
+  @UseGuards(JwtAuthGuard)
+  submitSubscriberFeedback(@Body() dto: SubscriberFeedbackDto, @CurrentUser() user: UserPayload) {
+    // subscriberId her zaman kimliği doğrulanmış kullanıcıdan alınır (IDOR koruması)
+    return this.campaignsService.submitSubscriberFeedback({ ...dto, subscriberId: user.userId });
+  }
+
+  @Get('subscriber/my-campaigns')
+  @UseGuards(JwtAuthGuard)
+  getMyActiveCampaigns(@CurrentUser() user: UserPayload) {
+    return this.campaignsService.getMyActiveCampaigns(user.userId);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.campaignsService.findOne(id);
@@ -44,31 +71,5 @@ export class CampaignsController {
   @Roles(RoleEnum.CAMPAIGN_EXPERT, RoleEnum.SUPERVISOR, RoleEnum.ADMIN)
   remove(@Param('id') id: string, @CurrentUser() user: UserPayload) {
     return this.campaignsService.remove(id, user.userId);
-  }
-
-  /**
-   * Subscriber Endpoints - Abone için özelleştirilmiş kampanya önerileri ve feedback
-   */
-  @Get('subscriber/recommendations')
-  @UseGuards(JwtAuthGuard)
-  getSubscriberRecommendations(
-    @Query() query: GetSubscriberRecommendationsQueryDto,
-    @CurrentUser() user: UserPayload
-  ) {
-    const subscriberId = query.subscriberId || user.userId;
-    return this.campaignsService.getSubscriberRecommendations(subscriberId, query.segment);
-  }
-
-  @Post('subscriber/feedback')
-  @UseGuards(JwtAuthGuard)
-  submitSubscriberFeedback(@Body() dto: SubscriberFeedbackDto, @CurrentUser() user: UserPayload) {
-    // Ensure subscriberId matches authenticated user
-    return this.campaignsService.submitSubscriberFeedback({ ...dto, subscriberId: user.userId });
-  }
-
-  @Get('subscriber/my-campaigns')
-  @UseGuards(JwtAuthGuard)
-  getMyActiveCampaigns(@CurrentUser() user: UserPayload) {
-    return this.campaignsService.getMyActiveCampaigns(user.userId);
   }
 }

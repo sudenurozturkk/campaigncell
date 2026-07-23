@@ -145,13 +145,13 @@ export default function DashboardShell({ children, role, userName, userDetail = 
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#050810] text-slate-800 dark:text-slate-100 flex transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 flex transition-colors duration-300">
       {/* Real-time SSE Toast Notifications (+2 Bonus Points) */}
       <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm w-full pointer-events-none">
         {toasts.map(toast => (
           <div
             key={toast.id}
-            className="pointer-events-auto p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl flex items-start space-x-3 animate-slide-up"
+            className="pointer-events-auto p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-xl flex items-start space-x-3 animate-slide-up"
           >
             <div className="p-2 rounded-xl bg-turkcell-yellow/20 text-turkcell-navy dark:text-turkcell-yellow shrink-0">
               <Bell className="w-4 h-4" />
@@ -174,7 +174,7 @@ export default function DashboardShell({ children, role, userName, userDetail = 
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-full z-50 flex flex-col border-r border-slate-200 dark:border-white/5 bg-white dark:bg-[#050810]/95 backdrop-blur-xl transition-all duration-300 shadow-sm dark:shadow-none
+        className={`fixed top-0 left-0 h-full z-50 flex flex-col border-r border-slate-200 dark:border-white/5 bg-white dark:bg-slate-900/95 backdrop-blur-xl transition-all duration-300 shadow-sm dark:shadow-none
           ${collapsed ? 'w-[72px]' : 'w-[260px]'}
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}
@@ -192,11 +192,11 @@ export default function DashboardShell({ children, role, userName, userDetail = 
             )}
           </Link>
           {!collapsed && (
-            <button onClick={() => setCollapsed(true)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-white transition-all hidden md:block">
+            <button onClick={() => setCollapsed(true)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all hidden md:block">
               <ChevronLeft className="w-4 h-4" />
             </button>
           )}
-          <button onClick={() => setMobileOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-white transition-all md:hidden">
+          <button onClick={() => setMobileOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-400 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white transition-all md:hidden">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -298,7 +298,7 @@ export default function DashboardShell({ children, role, userName, userDetail = 
       {/* Main Content */}
       <div className={`flex-1 transition-all duration-300 ${collapsed ? 'md:ml-[72px]' : 'md:ml-[260px]'}`}>
         {/* Top Bar Header (Desktop & Mobile) */}
-        <header className="sticky top-0 z-30 border-b border-slate-200/80 dark:border-white/5 bg-white/80 dark:bg-[#050810]/90 backdrop-blur-xl px-4 md:px-8 h-16 flex items-center justify-between">
+        <header className="sticky top-0 z-30 border-b border-slate-200/80 dark:border-white/5 bg-white/80 dark:bg-slate-900/90 backdrop-blur-xl px-4 md:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <button onClick={() => setMobileOpen(true)} className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 md:hidden">
               <Menu className="w-5 h-5" />

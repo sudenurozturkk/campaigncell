@@ -139,7 +139,7 @@ export default function LoginPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#050810] flex flex-col justify-between px-4 py-8 transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex flex-col justify-between px-4 py-8 transition-colors duration-300">
       {/* Top Header */}
       <div className="max-w-md w-full mx-auto flex items-center justify-between">
         <Link href="/" className="inline-flex items-center space-x-2.5 group">
@@ -155,7 +155,7 @@ export default function LoginPage() {
 
       {/* Main Card */}
       <div className="w-full max-w-md mx-auto my-auto py-6">
-        <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl shadow-slate-200/50 dark:shadow-none">
           <div>
             <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">Turkcell Platform Girişi</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 font-medium">Devam etmek için giriş rolünüzü ve bilgilerinizi giriniz</p>
@@ -163,7 +163,7 @@ export default function LoginPage() {
 
           {/* Role Selector */}
           <div>
-            <label className="block text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500 font-bold mb-2.5">
+            <label className="block text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-400 font-bold mb-2.5">
               Giriş Rolü Seçin
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -181,7 +181,7 @@ export default function LoginPage() {
                   className={`p-3 rounded-xl border text-center transition-all ${
                     role === r.key
                       ? 'bg-turkcell-navy text-white border-turkcell-navy dark:bg-turkcell-yellow dark:text-turkcell-navy dark:border-turkcell-yellow shadow-md scale-[1.02]'
-                      : 'bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
+                      : 'bg-slate-50 dark:bg-slate-700/40 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-300 dark:hover:border-slate-700'
                   }`}
                 >
                   <r.icon className="w-4 h-4 mx-auto mb-1.5 opacity-90" />
@@ -324,7 +324,7 @@ export default function LoginPage() {
           </div>
 
           {/* Register Link */}
-          <div className="text-center pt-2 border-t border-slate-100 dark:border-slate-800">
+          <div className="text-center pt-2 border-t border-slate-100 dark:border-slate-700">
             <span className="text-xs text-slate-500 font-medium">Hesabınız yok mu? </span>
             <Link href="/register" className="text-xs text-turkcell-blue dark:text-turkcell-yellow font-extrabold hover:underline">
               Hemen Abone Kaydı Oluşturun

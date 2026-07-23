@@ -5,8 +5,10 @@ export class SubscriberFeedbackDto {
   @IsUUID()
   campaignId: string;
 
+  // Backend her zaman JWT'deki userId ile üzerine yazar (IDOR koruması) — client göndermek zorunda değil.
+  @IsOptional()
   @IsUUID()
-  subscriberId: string;
+  subscriberId?: string;
 
   @IsEnum(FeedbackResponseEnum)
   response: FeedbackResponseEnum;

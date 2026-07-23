@@ -47,7 +47,7 @@ function ScoreRing({ value, size = 100, color }: { value: number; size?: number;
 
 export default function ExpertProfilePage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50 dark:bg-[#050810]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 dark:bg-slate-900" />}>
       <ExpertProfilePageInner />
     </Suspense>
   );

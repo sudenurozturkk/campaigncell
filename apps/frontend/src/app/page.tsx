@@ -11,9 +11,9 @@ import ThemeToggle from './components/ThemeToggle';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-[#050810] text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-300">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-300">
       {/* ===== HEADER ===== */}
-      <header className="border-b border-slate-200 dark:border-white/5 backdrop-blur-xl sticky top-0 z-50 bg-white/80 dark:bg-[#050810]/60">
+      <header className="border-b border-slate-200 dark:border-white/5 backdrop-blur-xl sticky top-0 z-50 bg-white/80 dark:bg-slate-700/40">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-turkcell-yellow via-amber-400 to-turkcell-blue flex items-center justify-center font-black text-turkcell-navy text-lg shadow-md shadow-turkcell-yellow/20">
@@ -82,7 +82,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
             {/* Subscriber */}
             <Link href="/dashboard/subscriber" className="group">
-              <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 h-full flex flex-col justify-between shadow-sm hover:shadow-md hover:border-turkcell-blue transition-all">
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 h-full flex flex-col justify-between shadow-sm hover:shadow-md hover:border-turkcell-blue transition-all">
                 <div className="space-y-4">
                   <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-500/20 border border-blue-200 dark:border-blue-500/20 flex items-center justify-center text-blue-600 dark:text-blue-400 group-hover:scale-105 transition-all">
                     <UserCheck className="w-6 h-6" />
@@ -108,7 +108,7 @@ export default function LandingPage() {
 
             {/* Expert */}
             <Link href="/dashboard/expert" className="group">
-              <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 h-full flex flex-col justify-between shadow-sm hover:shadow-md hover:border-amber-400 transition-all">
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 h-full flex flex-col justify-between shadow-sm hover:shadow-md hover:border-amber-400 transition-all">
                 <div className="space-y-4">
                   <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-turkcell-yellow/20 border border-amber-200 dark:border-turkcell-yellow/20 flex items-center justify-center text-amber-600 dark:text-turkcell-yellow group-hover:scale-105 transition-all">
                     <Cpu className="w-6 h-6" />
@@ -133,7 +133,7 @@ export default function LandingPage() {
 
             {/* Supervisor */}
             <Link href="/dashboard/supervisor" className="group">
-              <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 h-full flex flex-col justify-between shadow-sm hover:shadow-md hover:border-purple-400 transition-all">
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-6 h-full flex flex-col justify-between shadow-sm hover:shadow-md hover:border-purple-400 transition-all">
                 <div className="space-y-4">
                   <div className="w-12 h-12 rounded-2xl bg-purple-50 dark:bg-purple-500/20 border border-purple-200 dark:border-purple-500/20 flex items-center justify-center text-purple-600 dark:text-purple-400 group-hover:scale-105 transition-all">
                     <BarChart3 className="w-6 h-6" />
@@ -160,7 +160,7 @@ export default function LandingPage() {
       </main>
 
       {/* ===== FOOTER ===== */}
-      <footer className="border-t border-slate-200 dark:border-white/5 py-8 bg-white dark:bg-[#050810]">
+      <footer className="border-t border-slate-200 dark:border-white/5 py-8 bg-white dark:bg-slate-900">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between text-xs text-slate-500 font-medium gap-4">
           <div className="flex items-center space-x-2">
             <span className="font-extrabold text-turkcell-navy dark:text-white">CampaignCell</span>

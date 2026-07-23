@@ -26,7 +26,7 @@ interface HistoryItem {
 
 export default function SubscriberHistoryPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-slate-50 dark:bg-[#050810]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-slate-50 dark:bg-slate-900" />}>
       <SubscriberHistoryPageInner />
     </Suspense>
   );
