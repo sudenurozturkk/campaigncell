@@ -15,6 +15,30 @@ export class LeaderboardService {
     private readonly pointsService: PointsService,
   ) {}
 
+  /**
+   * Uzman id → ad eşlemesini Identity Service'ten çeker (liderlik/profilde UUID yerine isim gösterilir).
+   * Erişilemezse boş harita döner ve UI id'ye düşer (servis bağımsızlığı korunur).
+   */
+  private async fetchExpertNames(): Promise<Map<string, string>> {
+    const base = process.env.IDENTITY_SERVICE_URL || 'http://identity-service:3001';
+    const map = new Map<string, string>();
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`${base}/internal/experts`, { signal: controller.signal });
+      clearTimeout(timer);
+      if (res.ok) {
+        const body: any = await res.json();
+        for (const e of body?.data ?? []) {
+          if (e?.id && e?.name) map.set(e.id, e.name);
+        }
+      }
+    } catch {
+      // Identity erişilemez → isimsiz (id) devam.
+    }
+    return map;
+  }
+
   async getLeaderboard(period: LeaderboardPeriod = LeaderboardPeriod.ALL_TIME) {
     const where: any = {};
     const now = new Date();
@@ -44,6 +68,8 @@ export class LeaderboardService {
       take: 10,
     });
 
+    const expertNames = await this.fetchExpertNames();
+
     const leaderboard = await Promise.all(
       grouped.map(async (item, index) => {
         const expertId = item.expertId;
@@ -54,6 +80,7 @@ export class LeaderboardService {
         return {
           rank: index + 1,
           expertId,
+          expertName: expertNames.get(expertId) || 'Uzman',
           totalPoints,
           level: levelInfo.currentLevel,
           earnedBadgesCount: badgesCount,

@@ -91,33 +91,37 @@ class CampaignCellApiClient {
 
   // ===== IDENTITY SERVICE =====
   async login(identifier: string, passOrOtp: string, role: string) {
-    try {
-      const res = await fetch(`${this.gatewayUrl}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({ identifier, password: passOrOtp, role }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.accessToken) this.setToken(data.accessToken);
-        return data;
-      }
-    } catch {
-      // Fallback response for dev/unreachable API
+    const res = await fetch(`${this.gatewayUrl}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ identifier, password: passOrOtp, role }),
+    });
+    if (!res.ok) {
+      // Sahte token fallback KALDIRILDI — gerçek kimlik doğrulama başarısızsa hata yükselir.
+      throw new Error('Giriş başarısız');
     }
-    return {
-      accessToken: 'simulated-jwt-token-2026',
-      user: {
-        id: 'user-1',
-        email: identifier.includes('@') ? identifier : `${identifier}@turkcell.com.tr`,
-        role,
-        firstName: role === 'SUBSCRIBER' ? 'Ahmet' : role === 'SUPERVISOR' ? 'Süpervizör' : 'Ahmet',
-        lastName: role === 'SUBSCRIBER' ? 'Yılmaz' : 'Uzman',
-      },
-    };
+    const data = await res.json();
+    const tok = data.access_token || data.accessToken;
+    if (tok) this.setToken(tok);
+    return data;
   }
 
   // ===== CAMPAIGN SERVICE =====
+  async getCampaigns(): Promise<ApiCampaign[]> {
+    try {
+      const res = await fetch(`${this.gatewayUrl}/api/v1/campaigns?limit=20`, {
+        headers: this.getHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return Array.isArray(data) ? data : data.items || [];
+      }
+    } catch {
+      // Fallback
+    }
+    return [];
+  }
+
   async getCases(): Promise<ApiCase[]> {
     try {
       const res = await fetch(`${this.gatewayUrl}/api/v1/cases?limit=50`, {
@@ -128,18 +132,9 @@ class CampaignCellApiClient {
         return Array.isArray(data) ? data : data.items || [];
       }
     } catch {
-      // Fallback
+      // Servis erişilemez → sahte veri YOK, boş liste (UI empty state gösterir).
     }
-    return [
-      {
-        id: 'case-1', caseCode: 'CMP-2026-000101', campaignName: 'Yüksek Değerli Abone 20GB Ek Paket',
-        campaignType: 'EK_PAKET', segment: 'YUKSEK_DEGER', priority: 'YUKSEK',
-        status: 'OPTIMIZE_EDILIYOR', aiScore: 0.94, assignedExpert: 'Ahmet Yılmaz',
-        isAiMisclassified: false, optimizationNote: 'Ekstra %5 sadakat indirimi tanımlandı.',
-        slaDeadline: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
-        slaBreached: false, discountPercent: 30,
-      },
-    ];
+    return [];
   }
 
   async createCampaign(data: { name: string; type: string; segment: string; discountPercent: number }) {
@@ -147,13 +142,67 @@ class CampaignCellApiClient {
       const res = await fetch(`${this.gatewayUrl}/api/v1/campaigns`, {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify(data),
+        // Backend DTO alanı `targetSegment` (segment değil) — doğru alan adıyla gönderilir.
+        body: JSON.stringify({
+          name: data.name,
+          type: data.type,
+          targetSegment: data.segment,
+          discountPercent: data.discountPercent,
+        }),
       });
       if (res.ok) return await res.json();
     } catch {
-      // Fallback
+      // Sahte başarı yanıtı YOK.
     }
-    return { success: true, caseCode: `CMP-2026-${Math.floor(100000 + Math.random() * 900000)}` };
+    return { success: false, error: 'Kampanya oluşturulamadı (servis erişilemez).' };
+  }
+
+  // Case §8.2: Aboneye özel, AI ile skorlanmış kişisel teklifler (skor >= 0.60).
+  async getSubscriberOffers(subscriberId: string): Promise<any[]> {
+    try {
+      const res = await fetch(`${this.gatewayUrl}/api/v1/subscribers/${subscriberId}/offers`, {
+        headers: this.getHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return Array.isArray(data?.offers) ? data.offers : [];
+      }
+    } catch {
+      // Servis erişilemez → boş.
+    }
+    return [];
+  }
+
+  // Abonenin gerçek teklif geçmişi (kabul/ret + puanlar).
+  async getSubscriberHistory(subscriberId: string): Promise<any[]> {
+    try {
+      const res = await fetch(`${this.gatewayUrl}/api/v1/subscribers/${subscriberId}/history`, {
+        headers: this.getHeaders(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return Array.isArray(data?.items) ? data.items : [];
+      }
+    } catch {
+      // boş
+    }
+    return [];
+  }
+
+  // Case §4.5/§4.6: Abone teklif yanıtı (ACCEPTED/REJECTED) ve/veya 1-5 yıldız puanı.
+  async submitFeedback(payload: { campaignId: string; response: 'ACCEPTED' | 'REJECTED'; rejectionReason?: string; rating?: number }) {
+    try {
+      const res = await fetch(`${this.gatewayUrl}/api/v1/feedback`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) return await res.json();
+      const err = await res.json().catch(() => ({}));
+      return { success: false, error: err?.error?.message || err?.message || 'Geri bildirim gönderilemedi.' };
+    } catch {
+      return { success: false, error: 'Geri bildirim gönderilemedi (servis erişilemez).' };
+    }
   }
 
   async transitionCaseStatus(caseId: string, targetStatus: string, note?: string) {
@@ -170,7 +219,7 @@ class CampaignCellApiClient {
     } catch (err: unknown) {
       if (err instanceof Error && err.message.includes('422')) throw err;
     }
-    return { success: true, status: targetStatus };
+    return { success: false, error: 'Durum güncellenemedi (servis erişilemez).' };
   }
 
   async overrideSegment(caseId: string, newSegment: string, reason: string) {
@@ -182,9 +231,9 @@ class CampaignCellApiClient {
       });
       if (res.ok) return await res.json();
     } catch {
-      // Fallback
+      // Sahte başarı yanıtı YOK.
     }
-    return { success: true, isAiMisclassified: true };
+    return { success: false, error: 'Segment güncellenemedi (servis erişilemez).' };
   }
 
   // ===== GAMIFICATION SERVICE (Case §8.1: /api/v1/game) =====
@@ -199,19 +248,16 @@ class CampaignCellApiClient {
         return rows.map((r: Record<string, unknown>, i: number) => ({
           rank: (r.rank as number) ?? i + 1,
           expertId: (r.expertId as string) || '',
-          name: (r.name as string) || `Uzman ${String(r.expertId || '').slice(0, 8)}`,
+          name: (r.expertName as string) || (r.name as string) || `Uzman ${String(r.expertId || '').slice(0, 8)}`,
           level: (r.level as string) || 'Bronz',
           points: (r.totalPoints as number) ?? (r.points as number) ?? 0,
           badges: (r.badges as string[]) || [],
         }));
       }
     } catch {
-      // Fallback
+      // Sahte leaderboard YOK.
     }
-    return [
-      { rank: 1, expertId: 'exp-1', name: 'Ahmet Yılmaz', level: 'Platin', points: 3450, badges: ['ILK_KAMPANYA', 'HIZ_USTASI', 'DONUSUM_KRALI'] },
-      { rank: 2, expertId: 'exp-2', name: 'Ayşe Kaya', level: 'Altın', points: 2280, badges: ['ILK_KAMPANYA', 'DONUSUM_KRALI'] },
-    ];
+    return [];
   }
 
   // ===== AI SERVICE =====
@@ -237,19 +283,14 @@ class CampaignCellApiClient {
         };
       }
     } catch {
-      // Fallback
+      // Sahte AI metriği YOK.
     }
     return {
-      accuracy: 88.5,
-      totalPredictions: 1420,
-      misclassifications: 163,
-      f1Score: 0.872,
-      categories: [
-        { name: 'YÜKSEK DEĞER', accuracy: 92.4, correct: 416, total: 450 },
-        { name: 'RİSKLİ KAYIP', accuracy: 91.2, correct: 346, total: 380 },
-        { name: 'YENİ ABONE', accuracy: 84.0, correct: 269, total: 320 },
-        { name: 'PASİF ABONE', accuracy: 82.5, correct: 223, total: 270 },
-      ],
+      accuracy: 0,
+      totalPredictions: 0,
+      misclassifications: 0,
+      f1Score: 0,
+      categories: [],
     };
   }
 }

@@ -16,10 +16,7 @@ interface LeaderboardEntry {
   name: string;
   level: string;
   points: number;
-  badges: string[];
-  completedCases: number;
-  avgSlaHours: number;
-  isCurrentUser: boolean;
+  badgesCount: number;
 }
 
 interface SlaEntry {
@@ -27,6 +24,7 @@ interface SlaEntry {
   campaignName: string;
   priority: string;
   status: string;
+  segment: string;
   slaHours: number;
   remainingHours: number;
   expert: string;
@@ -84,30 +82,15 @@ const LEVEL_CONFIG: Record<string, { bg: string; text: string; border: string; m
   Bronz: { bg: 'bg-orange-100 dark:bg-amber-700/15', text: 'text-orange-800 dark:text-amber-600 font-bold', border: 'border-orange-200 dark:border-amber-700/30', min: 0, max: 499 },
 };
 
-const INITIAL_BENCHMARK: BenchmarkResult[] = [
-  { model_name: 'Deep Learning (Neural Network)', cv_accuracy_pct: 99.8, f1_score: 1.0, cv_std_pct: 0.12 },
-  { model_name: 'RandomForest', cv_accuracy_pct: 99.5, f1_score: 1.0, cv_std_pct: 0.45 },
-  { model_name: 'GradientBoosting', cv_accuracy_pct: 99.5, f1_score: 1.0, cv_std_pct: 0.55 },
-  { model_name: 'ExtraTrees', cv_accuracy_pct: 89.6, f1_score: 0.9359, cv_std_pct: 2.27 },
-];
-
-const INITIAL_FEATURES: FeatureImportance[] = [
-  { feature: 'data_usage_trend_pct', label: 'Veri Tüketim Trendi (%)', importance_weight: 0.3737, percentage: 37.37 },
-  { feature: 'monthly_spend_try', label: 'Aylık Harcama / ARPU (TL)', importance_weight: 0.3347, percentage: 33.47 },
-  { feature: 'monthly_data_usage_gb', label: 'Aylık Veri Kullanımı (GB)', importance_weight: 0.1204, percentage: 12.04 },
-  { feature: 'complaint_count', label: 'Şikayet Kaydı Sayısı', importance_weight: 0.1092, percentage: 10.92 },
-  { feature: 'monthly_voice_min', label: 'Aylık Konuşma Süresi (Dk)', importance_weight: 0.0274, percentage: 2.74 },
-  { feature: 'tenure_months', label: 'Abonelik Süresi (Ay)', importance_weight: 0.0216, percentage: 2.16 },
-];
-
 function SupervisorDashboardContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
 
   const [activeTab, setActiveTab] = useState<'overview' | 'leaderboard' | 'ai_accuracy' | 'sla'>('overview');
-  const [benchmarkData, setBenchmarkData] = useState<BenchmarkResult[]>(INITIAL_BENCHMARK);
-  const [featuresData, setFeaturesData] = useState<FeatureImportance[]>(INITIAL_FEATURES);
+  const [benchmarkData, setBenchmarkData] = useState<BenchmarkResult[]>([]);
+  const [featuresData, setFeaturesData] = useState<FeatureImportance[]>([]);
   const [liveAccuracy, setLiveAccuracy] = useState<LiveAccuracy | null>(null);
+  const [supervisorName, setSupervisorName] = useState('Süpervizör Yönetici');
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [demoSimulating, setDemoSimulating] = useState(false);
   const [isLive, setIsLive] = useState(false);
@@ -119,22 +102,8 @@ function SupervisorDashboardContent() {
     }
   }, [tabParam]);
 
-  const DEMO_LEADERBOARD: LeaderboardEntry[] = [
-    { rank: 1, name: 'Ahmet Yılmaz', level: 'Platin', points: 3450, badges: ['ILK_KAMPANYA', 'HIZ_USTASI', 'DONUSUM_KRALI', 'CHURN_AVCISI'], completedCases: 48, avgSlaHours: 1.4, isCurrentUser: true },
-    { rank: 2, name: 'Ayşe Kaya', level: 'Altın', points: 2280, badges: ['ILK_KAMPANYA', 'DONUSUM_KRALI', 'MARATONCU'], completedCases: 34, avgSlaHours: 2.1, isCurrentUser: false },
-    { rank: 3, name: 'Mehmet Demir', level: 'Altın', points: 1890, badges: ['ILK_KAMPANYA', 'HIZ_USTASI'], completedCases: 29, avgSlaHours: 3.2, isCurrentUser: false },
-    { rank: 4, name: 'Zeynep Çelik', level: 'Gümüş', points: 1240, badges: ['ILK_KAMPANYA', 'UZMAN'], completedCases: 19, avgSlaHours: 2.8, isCurrentUser: false },
-    { rank: 5, name: 'Caner Şahin', level: 'Bronz', points: 420, badges: ['ILK_KAMPANYA'], completedCases: 8, avgSlaHours: 4.5, isCurrentUser: false },
-  ];
-
-  const DEMO_SLA: SlaEntry[] = [
-    { caseCode: 'CMP-2026-000102', campaignName: 'Riskli Kayıp Abone Çözüm Kampanyası', priority: 'KRİTİK', status: 'ATANDI', slaHours: 2, remainingHours: 0.8, expert: 'Ahmet Yılmaz', breached: false },
-    { caseCode: 'CMP-2026-000105', campaignName: 'Eski Tarife Yenileme Fırsatı', priority: 'YÜKSEK', status: 'OPTIMIZE_EDILIYOR', slaHours: 8, remainingHours: 2.1, expert: 'Ayşe Kaya', breached: false },
-    { caseCode: 'CMP-2026-000099', campaignName: 'Cihaz Kampanyası Segment Düzeltme', priority: 'KRİTİK', status: 'YENİ', slaHours: 2, remainingHours: 0, expert: 'Atanmadı', breached: true },
-  ];
-
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(DEMO_LEADERBOARD);
-  const [slaCases, setSlaCases] = useState<SlaEntry[]>(DEMO_SLA);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [slaCases, setSlaCases] = useState<SlaEntry[]>([]);
 
   const loadAiAnalytics = async () => {
     setIsAiLoading(true);
@@ -174,69 +143,106 @@ function SupervisorDashboardContent() {
         });
       }
     } catch {
-      // Fallback stays active
+      // Fallback
     } finally {
       setIsAiLoading(false);
     }
   };
 
-  // Gerçek liderlik tablosu ve SLA verisini (canlı backend) yükler; hata olursa demo veri kalır.
+  // Gerçek liderlik tablosu ve SLA verisini (canlı backend/PostgreSQL) yükler
   const loadOperationalData = async () => {
     try {
-      const lbRes = await fetch(`${API_GW}/api/v1/game/leaderboard?period=ALL_TIME`, { headers: authHeaders() });
+      const [lbRes, usersRes, casesRes] = await Promise.all([
+        fetch(`${API_GW}/api/v1/game/leaderboard?period=ALL_TIME`, { headers: authHeaders() }),
+        fetch(`${API_GW}/api/v1/admin/users`, { headers: authHeaders() }),
+        fetch(`${API_GW}/api/v1/cases?limit=50`, { headers: authHeaders() }),
+      ]);
+
+      let userMap: Record<string, string> = {};
+      if (usersRes.ok) {
+        const uData = await usersRes.json();
+        const uList = Array.isArray(uData) ? uData : uData.data || [];
+        uList.forEach((u: any) => {
+          if (u.id) userMap[u.id] = `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email;
+        });
+      }
+
       if (lbRes.ok) {
         const d = await lbRes.json();
         const rows = Array.isArray(d) ? d : d.leaderboard || [];
         if (rows.length > 0) {
           setLeaderboard(
-            rows.map((r: Record<string, unknown>, i: number) => ({
-              rank: (r.rank as number) ?? i + 1,
-              name: (r.name as string) || `Uzman ${String(r.expertId || '').slice(0, 8)}`,
-              level: (r.level as string) || 'Bronz',
-              points: (r.totalPoints as number) ?? (r.points as number) ?? 0,
-              badges: (r.badges as string[]) || [],
-              completedCases: (r.completedCases as number) ?? (r.earnedBadgesCount as number) ?? 0,
-              avgSlaHours: (r.avgSlaHours as number) ?? 0,
-              isCurrentUser: false,
-            })),
+            rows.map((r: Record<string, unknown>, i: number) => {
+              const expId = String(r.expertId || '');
+              return {
+                rank: (r.rank as number) ?? i + 1,
+                name: (r.expertName as string) || userMap[expId] || `Uzman ${expId.slice(0, 8)}`,
+                level: (r.level as string) || 'Bronz',
+                points: (r.totalPoints as number) ?? (r.points as number) ?? 0,
+                badgesCount: (r.earnedBadgesCount as number) ?? 0,
+              };
+            }),
           );
           setIsLive(true);
         }
       }
 
-      const casesRes = await fetch(`${API_GW}/api/v1/cases?limit=50`, { headers: authHeaders() });
       if (casesRes.ok) {
         const d = await casesRes.json();
         const items = Array.isArray(d) ? d : d.items || [];
-        const mapped: SlaEntry[] = items
-          .filter((c: Record<string, unknown>) => c.slaStatus === 'WARNING' || c.slaStatus === 'BREACHED')
-          .map((c: Record<string, unknown>) => {
-            const campaign = (c.campaign as Record<string, unknown>) || {};
-            return {
-              caseCode: (c.caseCode as string) || '-',
-              campaignName: (campaign.name as string) || (c.segment as string) || 'Kampanya',
-              priority: (c.priority as string) || 'ORTA',
-              status: (c.status as string) || '-',
-              slaHours: 0,
-              remainingHours: (c.slaRemainingHours as number) ?? 0,
-              expert: (c.assignedExpertId as string) ? String(c.assignedExpertId).slice(0, 8) : 'Atanmadı',
-              breached: c.slaStatus === 'BREACHED',
-            };
-          });
+        const mapped: SlaEntry[] = items.map((c: Record<string, any>) => {
+          const deadline = c.slaDeadline ? new Date(c.slaDeadline).getTime() : Date.now() + 6 * 3600 * 1000;
+          const remMs = deadline - Date.now();
+          const remHours = Math.max(0, Math.round((remMs / (1000 * 60 * 60)) * 10) / 10);
+          const expId = c.assignedExpertId ? String(c.assignedExpertId) : '';
+          return {
+            caseCode: c.caseCode || c.campaign?.code || '-',
+            campaignName: c.campaign?.name || c.campaignName || 'Optimizasyon Vakası',
+            priority: c.priority || 'ORTA',
+            status: c.status || 'YENI',
+            segment: c.segment || 'BELIRSIZ',
+            slaHours: c.priority === 'KRITIK' ? 2 : c.priority === 'YUKSEK' ? 8 : 24,
+            remainingHours: remHours,
+            expert: userMap[expId] || (expId ? `Uzman ${expId.slice(0, 8)}` : 'Atanmadı'),
+            breached: Boolean(c.slaBreached || remMs <= 0),
+          };
+        });
         if (mapped.length > 0) {
           setSlaCases(mapped);
           setIsLive(true);
         }
       }
     } catch {
-      // demo veri kalır
+      // live operational data fetch handled gracefully
     }
   };
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cc_user');
+        if (stored) {
+          const u = JSON.parse(stored);
+          const n = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+          if (n) setSupervisorName(n);
+        }
+      } catch {}
+    }
     loadAiAnalytics();
     loadOperationalData();
   }, []);
+
+  // Overview KPI'ları CANLI veriden türetilir (sahte sabit yok). Veri yoksa '—' gösterilir.
+  const activeCaseCount = slaCases.length;
+  const optimizingCount = slaCases.filter(s => s.status === 'OPTIMIZE_EDILIYOR').length;
+  const breachedCount = slaCases.filter(s => s.breached).length;
+  const slaComplyPct = activeCaseCount > 0 ? Math.round(((activeCaseCount - breachedCount) / activeCaseCount) * 1000) / 10 : null;
+  const segmentDistribution = ['YUKSEK_DEGER', 'RISKLI_KAYIP', 'YENI_ABONE', 'PASIF', 'BELIRSIZ']
+    .map(seg => ({ seg, count: slaCases.filter(s => s.segment === seg).length }))
+    .filter(x => x.count > 0);
+  const segColors: Record<string, string> = {
+    YUKSEK_DEGER: 'bg-emerald-500', RISKLI_KAYIP: 'bg-rose-500', YENI_ABONE: 'bg-blue-500', PASIF: 'bg-amber-500', BELIRSIZ: 'bg-slate-400',
+  };
 
   const triggerDemoSimulation = async () => {
     setDemoSimulating(true);
@@ -245,9 +251,9 @@ function SupervisorDashboardContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: 'BADGE_EARNED',
-          title: '🏆 Canlı Jüri Demosu: Yeni Rozet Kazanıldı!',
-          message: 'Ahmet Yılmaz (Uzman) - Churn Avcısı Rozeti ve +15 Puan Kazandı! (Real-time SSE Notification)',
+          type: 'SYSTEM_TEST',
+          title: '🔔 Canlı SSE Bağlantı Testi',
+          message: 'Süpervizör panelinden gerçek zamanlı SSE bildirim kanalı test edildi (bağlantı aktif).',
         }),
       });
     } catch { /* ignore */ }
@@ -257,7 +263,7 @@ function SupervisorDashboardContent() {
   return (
     <DashboardShell
       role="supervisor"
-      userName="Süpervizör Yönetici"
+      userName={supervisorName}
       userDetail="Pazarlama ve Operasyon Yöneticisi"
       activeTab={activeTab}
       onTabChange={setActiveTab}
@@ -322,10 +328,10 @@ function SupervisorDashboardContent() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {[
-                { label: 'Aktif Vakalar', val: '42 Vaka', desc: '12 Optimizasyonda', icon: Activity, color: 'text-blue-600 dark:text-blue-400' },
-                { label: 'SLA Uyum Oranı', val: '%94.2', desc: 'Hedef: %90+', icon: Timer, color: 'text-emerald-600 dark:text-emerald-400' },
-                { label: 'AI Tahmin Doğruluğu', val: '%88.5', desc: '1420 Tahmin', icon: Brain, color: 'text-turkcell-blue dark:text-turkcell-yellow' },
-                { label: 'Ortalama Dönüşüm Artışı', val: '+%18.4', desc: 'A/B Test Ortalama', icon: TrendingUp, color: 'text-purple-600 dark:text-purple-400' },
+                { label: 'Aktif Vakalar', val: `${activeCaseCount} Vaka`, desc: `${optimizingCount} Optimizasyonda`, icon: Activity, color: 'text-blue-600 dark:text-blue-400' },
+                { label: 'SLA Uyum Oranı', val: slaComplyPct != null ? `%${slaComplyPct}` : '—', desc: `${breachedCount} İhlal`, icon: Timer, color: 'text-emerald-600 dark:text-emerald-400' },
+                { label: 'AI Tahmin Doğruluğu', val: liveAccuracy ? `%${liveAccuracy.accuracy_percentage}` : '—', desc: liveAccuracy ? `${liveAccuracy.total_predictions} Tahmin` : 'Veri bekleniyor', icon: Brain, color: 'text-turkcell-blue dark:text-turkcell-yellow' },
+                { label: 'Düzeltilen Tahmin', val: liveAccuracy ? `${liveAccuracy.corrected_predictions_count}` : '—', desc: 'AI doğruluk geri bildirimi', icon: TrendingUp, color: 'text-purple-600 dark:text-purple-400' },
               ].map((kpi, i) => (
                 <div key={i} className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-2">
                   <div className="flex items-center justify-between">
@@ -338,26 +344,24 @@ function SupervisorDashboardContent() {
               ))}
             </div>
 
-            {/* Segment Breakdown */}
+            {/* Segment Breakdown — canlı vaka verisinden hesaplanır */}
             <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Segment Dağılımı ve Dönüşüm Oranları</h3>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {[
-                  { name: 'YÜKSEK DEĞER', total: 450, rate: '%32', color: 'bg-emerald-500' },
-                  { name: 'RİSKLİ KAYIP (Churn)', total: 380, rate: '%14 (KRİTİK)', color: 'bg-rose-500' },
-                  { name: 'YENİ ABONE', total: 320, rate: '%28', color: 'bg-blue-500' },
-                  { name: 'PASİF ABONE', total: 270, rate: '%18', color: 'bg-amber-500' },
-                ].map((seg, idx) => (
-                  <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
-                    <div className="flex items-center space-x-2">
-                      <span className={`w-2.5 h-2.5 rounded-full ${seg.color}`} />
-                      <span className="text-xs font-extrabold text-slate-900 dark:text-white">{seg.name}</span>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Segment Dağılımı (Aktif Vakalar)</h3>
+              {segmentDistribution.length === 0 ? (
+                <p className="text-xs text-slate-400 font-medium">Henüz vaka yok. Kampanya oluşturuldukça segment dağılımı burada canlı görünür.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  {segmentDistribution.map((seg) => (
+                    <div key={seg.seg} className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${segColors[seg.seg] || 'bg-slate-400'}`} />
+                        <span className="text-xs font-extrabold text-slate-900 dark:text-white">{SEGMENT_LABELS[seg.seg] || seg.seg}</span>
+                      </div>
+                      <div className="text-lg font-black text-slate-900 dark:text-white">{seg.count} Vaka</div>
                     </div>
-                    <div className="text-lg font-black text-slate-900 dark:text-white">{seg.total} Müşteri</div>
-                    <div className="text-[11px] font-semibold text-slate-500">Dönüşüm Oranı: <span className="text-slate-900 dark:text-white">{seg.rate}</span></div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -371,53 +375,43 @@ function SupervisorDashboardContent() {
                 <p className="text-xs text-slate-500 mt-0.5 font-medium">Tamamlanan vaka, SLA süresi ve dönüşüm başarısına göre puanlanan liderlik tablosu</p>
               </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-left">
-                    {['Sıra', 'Uzman', 'Seviye', 'Toplam Puan', 'Rozetler', 'Tamamlanan', 'Ort. SLA'].map(h => (
-                      <th key={h} className="px-4 py-3 text-[11px] text-slate-500 font-bold uppercase tracking-wider">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                  {leaderboard.map(entry => {
-                    const levelMeta = LEVEL_CONFIG[entry.level];
-                    return (
-                      <tr key={entry.rank} className={`hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors ${entry.isCurrentUser ? 'bg-amber-50/40 dark:bg-turkcell-yellow/5' : ''}`}>
-                        <td className="px-4 py-3.5 font-black text-slate-900 dark:text-white">#{entry.rank}</td>
-                        <td className="px-4 py-3.5">
-                          <div className="font-bold text-slate-900 dark:text-white">{entry.name}</div>
-                          {entry.isCurrentUser && <span className="text-[10px] text-amber-600 dark:text-turkcell-yellow font-extrabold">(Siz)</span>}
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <span className={`px-2.5 py-1 rounded-full text-[10px] border ${levelMeta.bg} ${levelMeta.text} ${levelMeta.border}`}>
-                            {entry.level}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3.5 font-black text-turkcell-navy dark:text-turkcell-yellow text-sm">{entry.points} Puan</td>
-                        <td className="px-4 py-3.5">
-                          <div className="flex space-x-1">
-                            {entry.badges.map(bKey => {
-                              const b = BADGE_ICONS[bKey];
-                              if (!b) return null;
-                              const Icon = b.icon;
-                              return (
-                                <span key={bKey} title={b.label} className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 inline-flex">
-                                  <Icon className={`w-3.5 h-3.5 ${b.color}`} />
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5 font-bold text-slate-900 dark:text-white">{entry.completedCases} Vaka</td>
-                        <td className="px-4 py-3.5 font-medium text-slate-600 dark:text-slate-400">{entry.avgSlaHours} Saat</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            {leaderboard.length === 0 ? (
+              <div className="p-10 text-center text-xs text-slate-400 font-medium">
+                Henüz puan kazanan uzman yok. Uzmanlar optimizasyon tamamladıkça liderlik tablosu canlı dolar.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 text-left">
+                      {['Sıra', 'Uzman', 'Seviye', 'Toplam Puan', 'Rozet Sayısı'].map(h => (
+                        <th key={h} className="px-4 py-3 text-[11px] text-slate-500 font-bold uppercase tracking-wider">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {leaderboard.map(entry => {
+                      const levelMeta = LEVEL_CONFIG[entry.level] || LEVEL_CONFIG.Bronz;
+                      return (
+                        <tr key={entry.rank} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                          <td className="px-4 py-3.5 font-black text-slate-900 dark:text-white">#{entry.rank}</td>
+                          <td className="px-4 py-3.5">
+                            <div className="font-bold text-slate-900 dark:text-white">{entry.name}</div>
+                          </td>
+                          <td className="px-4 py-3.5">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] border ${levelMeta.bg} ${levelMeta.text} ${levelMeta.border}`}>
+                              {entry.level}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3.5 font-black text-turkcell-navy dark:text-turkcell-yellow text-sm">{entry.points} Puan</td>
+                          <td className="px-4 py-3.5 font-bold text-slate-900 dark:text-white">{entry.badgesCount} Rozet</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -573,6 +567,9 @@ function SupervisorDashboardContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {slaCases.length === 0 && (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-xs text-slate-400 font-medium">Aktif SLA takibi yapılan vaka yok.</td></tr>
+                  )}
                   {slaCases.map(s => (
                     <tr key={s.caseCode} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                       <td className="px-4 py-3.5 font-mono font-bold text-turkcell-blue dark:text-turkcell-yellow">{s.caseCode}</td>

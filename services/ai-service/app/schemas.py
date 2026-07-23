@@ -22,12 +22,21 @@ class SubscriberProfileResponse(SubscriberProfileBase):
     class Config:
         from_attributes = True
 
+class ExpertStat(BaseModel):
+    """Campaign Service'in kendi DB'sinden hesaplayıp AI'a taşıdığı gerçek uzman metrikleri (Case §5.3)."""
+    expert_id: str
+    active_workload: int = 0
+    performance_rating: Optional[float] = None  # ortalama conversion_lift (gerçek performans)
+
+
 class RecommendRequest(BaseModel):
     subscriber_id: str
     campaign_id: Optional[str] = None
     case_id: Optional[str] = None
     campaign_type: Optional[str] = "EK_PAKET"
     profile_override: Optional[SubscriberProfileBase] = None
+    # Campaign Service kendi DB'sinden gelen gerçek uzman iş yükü/performansını geçer (opsiyonel).
+    expert_stats: Optional[List[ExpertStat]] = None
 
 class ExpertScoreInfo(BaseModel):
     expert_id: Optional[str] = None

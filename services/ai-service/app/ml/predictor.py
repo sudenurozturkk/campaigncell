@@ -37,9 +37,10 @@ class PredictorEngine:
             cls._instance = super(PredictorEngine, cls).__new__(cls)
             cls._instance.segment_model = None
             cls._instance.conversion_model = None
-            cls._instance.version_tag = "v1.5-ra"
-            cls._instance.active_accuracy = 0.8850
-            cls._instance.active_f1 = 0.8720
+            # Gerçek model yüklenene/eğitilene kadar metrik UYDURMA DEĞİL, bilinmiyordur.
+            cls._instance.version_tag = "v1.0-init"
+            cls._instance.active_accuracy = 0.0
+            cls._instance.active_f1 = 0.0
             cls._instance._load_or_train_default_models()
         return cls._instance
 
@@ -53,11 +54,32 @@ class PredictorEngine:
                     self.segment_model = pickle.load(f)
                 with open(conversion_model_path, "rb") as f:
                     self.conversion_model = pickle.load(f)
+                # Pickle'dan yüklenen model için doğruluk metriği GERÇEK olarak yeniden hesaplanır
+                # (init'teki sabit 0.0 asla dışa yansımaz — health/accuracy uydurma metrik göstermez).
+                self._recompute_active_metrics()
+                self.version_tag = "v1.6-rf"
                 return
             except Exception:
                 pass
 
         self.train_new_model(num_samples=1200, model_type="RandomForest")
+
+    def _recompute_active_metrics(self, num_samples: int = 600):
+        """Yüklü modelin GERÇEK test doğruluğunu taze bir veri seti üzerinde ölçer (sabit değer değil)."""
+        try:
+            df = generate_synthetic_telecom_dataset(num_samples=num_samples)
+            X = df[FEATURE_COLS]
+            y_segment = df['target_segment']
+            split_idx = int(len(df) * 0.8)
+            X_test = X.iloc[split_idx:]
+            y_test = y_segment.iloc[split_idx:]
+            preds = self.segment_model.predict(X_test)
+            self.active_accuracy = float(accuracy_score(y_test, preds))
+            self.active_f1 = float(f1_score(y_test, preds, average='weighted'))
+        except Exception:
+            # Ölçüm yapılamazsa metrik bilinmiyor kalır (yine de uydurma sabit yok).
+            self.active_accuracy = 0.0
+            self.active_f1 = 0.0
 
     def train_new_model(self, num_samples: int = 1200, model_type: str = "RandomForest") -> Tuple[str, float, float]:
         df = generate_synthetic_telecom_dataset(num_samples=num_samples)

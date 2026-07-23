@@ -204,6 +204,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@gamification-db:5432/gamification
       JWT_SECRET: campaigncell-secret-key-change-in-prod
       RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
+      IDENTITY_SERVICE_URL: http://identity-service:3001
     ports:
       - "3003:3003"
     depends_on:

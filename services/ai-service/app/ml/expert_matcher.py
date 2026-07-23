@@ -74,6 +74,7 @@ def find_best_expert_for_case(
     target_segment: str,
     campaign_type: str = "EK_PAKET",
     workloads: Optional[Dict[str, int]] = None,
+    performance_overrides: Optional[Dict[str, float]] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Optimizasyon vakası için en uygun uzmanı seçer (Case §5.3).
@@ -81,11 +82,16 @@ def find_best_expert_for_case(
     skor = (uzmanlik_eslesme × 0.5) + (bosluk_orani × 0.3) + (performans × 0.2)
       - uzmanlik_eslesme : eşleşme 1, değilse 0
       - bosluk_orani     : 1 - (aktif_vaka / MAX_CAPACITY=10)
-      - performans       : uzmanın ortalama dönüşüm artışı proxy'si
+      - performans       : uzmanın GERÇEK ortalama dönüşüm artışı (Campaign DB'den gelen conversion_lift);
+                           veri yoksa deterministik proxy'ye düşer (servis bağımsızlığı).
 
     Kapasitesi dolu (aktif_vaka >= 10) uzmanlar atlanır. Uygun uzman yoksa vaka kuyruğa alınır (queued=True).
+
+    workloads / performance_overrides: Campaign Service kendi DB'sinden hesaplayıp geçer
+    (database-per-service korunur — AI Campaign DB'ye erişmez, veri istekte taşınır).
     """
     workloads = workloads or {}
+    performance_overrides = performance_overrides or {}
     experts = fetch_experts()
 
     best_expert = None
@@ -103,7 +109,11 @@ def find_best_expert_for_case(
 
         uzmanlik_eslesme = _expertise_match(expert.get("expertise_tags", []), target_segment, campaign_type)
         bosluk_orani = max(0.0, 1.0 - (workload / MAX_CAPACITY))
-        performans = float(expert.get("performance_rating", _stable_performance(expert_id)))
+        # Öncelik: Campaign DB'den gelen gerçek performans → uzman objesindeki değer → deterministik proxy.
+        if expert_id in performance_overrides and performance_overrides[expert_id] is not None:
+            performans = float(performance_overrides[expert_id])
+        else:
+            performans = float(expert.get("performance_rating", _stable_performance(expert_id)))
 
         score = (uzmanlik_eslesme * 0.5) + (bosluk_orani * 0.3) + (performans * 0.2)
         score = round(score, 3)

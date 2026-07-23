@@ -84,6 +84,12 @@ router.use('/api/v1/ab-tests', proxy(CAMPAIGN_SERVICE_URL, {
   proxyReqPathResolver: (req) => `/api/v1/ab-tests${req.url}`,
 }));
 
+// Case §8.2: Aboneye özel teklifler → Campaign Service
+router.use('/api/v1/subscribers', proxy(CAMPAIGN_SERVICE_URL, {
+  ...proxyOptions(CAMPAIGN_SERVICE_URL),
+  proxyReqPathResolver: (req) => `/api/v1/subscribers${req.url}`,
+}));
+
 // 3. AI Service Proxy
 router.use('/api/v1/ai', proxy(AI_SERVICE_URL, {
   ...proxyOptions(AI_SERVICE_URL),

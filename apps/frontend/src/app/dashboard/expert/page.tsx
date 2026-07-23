@@ -49,43 +49,63 @@ function ExpertDashboardContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
 
-  const [cases, setCases] = useState<CaseItem[]>([
-    {
-      id: 'case-1', caseCode: 'CMP-2026-000101',
-      campaignName: 'Yüksek Değerli Abone 20GB Ek Paket', campaignType: 'EK_PAKET',
-      segment: 'YUKSEK_DEGER', priority: 'YUKSEK', status: 'OPTIMIZE_EDILIYOR',
-      aiScore: 0.94, assignedExpert: 'Ahmet Yılmaz', isAiMisclassified: false,
-      optimizationNote: 'Ekstra %5 sadakat indirimi eklendi.',
-      slaDeadline: new Date(Date.now() + 5 * 3600 * 1000).toISOString(), slaBreached: false,
-      discountPercent: 30, createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'case-2', caseCode: 'CMP-2026-000102',
-      campaignName: 'Riskli Kayıp Abone Çözüm Kampanyası', campaignType: 'TARIFE_YUKSELTME',
-      segment: 'RISKLI_KAYIP', priority: 'KRITIK', status: 'ATANDI',
-      aiScore: 0.88, assignedExpert: 'Ahmet Yılmaz', isAiMisclassified: false,
-      slaDeadline: new Date(Date.now() + 1 * 3600 * 1000).toISOString(), slaBreached: false,
-      discountPercent: 40, createdAt: new Date().toISOString(),
-    },
-    {
-      id: 'case-3', caseCode: 'CMP-2026-000103',
-      campaignName: 'Yeni Abone Hoş Geldin Paketi', campaignType: 'SADAKAT',
-      segment: 'YENI_ABONE', priority: 'ORTA', status: 'TEST_EDILIYOR',
-      aiScore: 0.76, assignedExpert: 'Ahmet Yılmaz', isAiMisclassified: false,
-      slaDeadline: new Date(Date.now() + 18 * 3600 * 1000).toISOString(), slaBreached: false,
-      discountPercent: 20, createdAt: new Date().toISOString(),
-    },
-  ]);
-
-  const [selectedCase, setSelectedCase] = useState<CaseItem | null>(cases[0]);
+  const [cases, setCases] = useState<CaseItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedCase, setSelectedCase] = useState<CaseItem | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'active' | 'completed'>('active');
   const [optNote, setOptNote] = useState('');
-  
+  const [expertName, setExpertName] = useState('Kampanya Uzmanı');
+
+  // Backend optimizasyon vakası → UI CaseItem eşlemesi (canlı veri).
+  const mapCase = (c: any): CaseItem => ({
+    id: c.id,
+    caseCode: c.caseCode || c.campaign?.code || '',
+    campaignName: c.campaign?.name || c.campaignName || 'Optimizasyon Vakası',
+    campaignType: c.campaign?.type || c.campaignType || '',
+    segment: c.segment || 'BELIRSIZ',
+    priority: c.priority || 'ORTA',
+    status: c.status || 'YENI',
+    aiScore: Number(c.aiScore) || 0,
+    assignedExpert: c.assignedExpertId || '',
+    isAiMisclassified: Boolean(c.isAiMisclassified),
+    optimizationNote: c.optimizationNote || undefined,
+    slaDeadline: c.slaDeadline || new Date().toISOString(),
+    slaBreached: Boolean(c.slaBreached),
+    discountPercent: Number(c.campaign?.discountPercent ?? c.discountPercent) || 0,
+    createdAt: c.createdAt || new Date().toISOString(),
+  });
+
+  const reloadCases = React.useCallback(async () => {
+    const { api } = await import('../../../lib/api');
+    const data = await api.getCases();
+    const mapped = (data || []).map(mapCase);
+    setCases(mapped);
+    setSelectedCase(prev => {
+      if (prev) {
+        const still = mapped.find(m => m.id === prev.id);
+        if (still) return still;
+      }
+      return mapped[0] || null;
+    });
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     if (tabParam && ['all', 'active', 'completed'].includes(tabParam)) {
       setActiveTab(tabParam as typeof activeTab);
     }
-  }, [tabParam]);
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cc_user');
+        if (stored) {
+          const u = JSON.parse(stored);
+          const n = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+          if (n) setExpertName(n);
+        }
+      } catch {}
+    }
+    reloadCases().catch(() => setLoading(false));
+  }, [tabParam, reloadCases]);
   const [newSeg, setNewSeg] = useState('');
   const [overrideReason, setOverrideReason] = useState('');
 
@@ -95,63 +115,64 @@ function ExpertDashboardContent() {
     name: '', type: 'EK_PAKET', segment: 'YUKSEK_DEGER', discountPercent: 20,
   });
 
-  const handleCreateCampaign = (e: React.FormEvent) => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newCode = `CMP-2026-${Math.floor(100000 + Math.random() * 900000)}`;
-    const created: CaseItem = {
-      id: `case-${Date.now()}`,
-      caseCode: newCode,
-      campaignName: newCampaign.name,
-      campaignType: newCampaign.type,
+    setSubmitting(true);
+    // Case §4.1: gerçek kampanya oluşturma — AI skorlama + otomatik vaka backend'de tetiklenir.
+    const { api } = await import('../../../lib/api');
+    const res = await api.createCampaign({
+      name: newCampaign.name,
+      type: newCampaign.type,
       segment: newCampaign.segment,
-      priority: newCampaign.segment === 'RISKLI_KAYIP' ? 'KRITIK' : 'YUKSEK',
-      status: 'YENI',
-      aiScore: 0.85,
-      assignedExpert: 'Ahmet Yılmaz',
-      isAiMisclassified: false,
-      slaDeadline: new Date(Date.now() + 8 * 3600 * 1000).toISOString(),
-      slaBreached: false,
       discountPercent: newCampaign.discountPercent,
-      createdAt: new Date().toISOString(),
-    };
-    setCases(prev => [created, ...prev]);
-    setSelectedCase(created);
+    });
+    setSubmitting(false);
+    if (res && res.success === false) {
+      alert(res.error || 'Kampanya oluşturulamadı.');
+      return;
+    }
     setShowCreateModal(false);
     setNewCampaign({ name: '', type: 'EK_PAKET', segment: 'YUKSEK_DEGER', discountPercent: 20 });
+    await reloadCases();
   };
 
-  const handleStatusTransition = (caseId: string, nextStatus: CaseItem['status']) => {
-    setCases(prev => prev.map(c => {
-      if (c.id === caseId) {
-        return { ...c, status: nextStatus, optimizationNote: optNote || c.optimizationNote };
+  const handleStatusTransition = async (caseId: string, nextStatus: CaseItem['status']) => {
+    // Case §4.2: gerçek state machine geçişi (kural dışıysa backend 422 döner).
+    const { api } = await import('../../../lib/api');
+    try {
+      const res = await api.transitionCaseStatus(caseId, nextStatus, optNote || undefined);
+      if (res && res.success === false) {
+        alert(res.error || 'Durum güncellenemedi.');
+        return;
       }
-      return c;
-    }));
-    if (selectedCase?.id === caseId) {
-      setSelectedCase(prev => prev ? { ...prev, status: nextStatus, optimizationNote: optNote || prev.optimizationNote } : null);
+      setOptNote('');
+      await reloadCases();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Geçiş başarısız (state machine kuralı).');
     }
   };
 
-  const handleSegmentOverride = (caseId: string) => {
+  const handleSegmentOverride = async (caseId: string) => {
     if (!newSeg) return;
-    setCases(prev => prev.map(c => {
-      if (c.id === caseId) {
-        return { ...c, segment: newSeg, isAiMisclassified: true };
-      }
-      return c;
-    }));
-    if (selectedCase?.id === caseId) {
-      setSelectedCase(prev => prev ? { ...prev, segment: newSeg, isAiMisclassified: true } : null);
+    // Case §4.3: gerçek segment override → AI doğruluk metriğine 'yanlış sınıflandırma' işlenir.
+    const { api } = await import('../../../lib/api');
+    const res = await api.overrideSegment(caseId, newSeg, overrideReason || 'Uzman düzeltmesi');
+    if (res && res.success === false) {
+      alert(res.error || 'Segment güncellenemedi.');
+      return;
     }
     setNewSeg('');
     setOverrideReason('');
+    await reloadCases();
   };
 
   return (
     <DashboardShell
       role="expert"
-      userName="Ahmet Yılmaz"
-      userDetail="Kampanya Uzmanı • İstanbul Bölgesi"
+      userName={expertName}
+      userDetail="Kampanya Uzmanı"
       activeTab={activeTab}
       onTabChange={setActiveTab}
     >
@@ -181,6 +202,10 @@ function ExpertDashboardContent() {
                 <span className="text-xs font-extrabold text-turkcell-blue dark:text-turkcell-yellow">{cases.length} Vaka</span>
               </div>
               <div className="space-y-2">
+                {loading && <div className="p-6 text-center text-xs text-slate-400">Vakalar yükleniyor...</div>}
+                {!loading && cases.length === 0 && (
+                  <div className="p-6 text-center text-xs text-slate-400">Henüz atanmış vaka yok. Yeni kampanya oluşturunca AI vaka üretir.</div>
+                )}
                 {cases.map(c => {
                   const pConfig = priorityConfig[c.priority];
                   const isSelected = selectedCase?.id === c.id;
@@ -362,9 +387,10 @@ function ExpertDashboardContent() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-turkcell-navy text-white dark:bg-turkcell-yellow dark:text-turkcell-navy font-bold rounded-xl"
+                  disabled={submitting}
+                  className="px-5 py-2 bg-turkcell-navy text-white dark:bg-turkcell-yellow dark:text-turkcell-navy font-bold rounded-xl disabled:opacity-60"
                 >
-                  Oluştur & AI Analizine Gönder
+                  {submitting ? 'Oluşturuluyor...' : 'Oluştur & AI Analizine Gönder'}
                 </button>
               </div>
             </form>

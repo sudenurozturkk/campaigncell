@@ -23,6 +23,21 @@ class SubscriberProfile(Base):
     data_usage_trend_pct = Column(Numeric(6, 2), default=0.0)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+class SubscriberTypePreference(Base):
+    """
+    Case §4.5: Abone 'ilgilenmiyorum' derse benzer (aynı tip) kampanyaların öneri skoru düşer.
+    Abone × kampanya tipi bazında kabul/ret sayacı tutulur; recommend sırasında skora ceza/bonus uygulanır.
+    """
+    __tablename__ = "subscriber_type_preferences"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    subscriber_id = Column(String(36), nullable=False, index=True)
+    campaign_type = Column(String(30), nullable=False, index=True)
+    accepted_count = Column(Integer, default=0)
+    rejected_count = Column(Integer, default=0)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+
 class ModelVersion(Base):
     __tablename__ = "model_versions"
 

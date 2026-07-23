@@ -29,7 +29,7 @@ COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 # Copy entrypoint
 COPY entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
+RUN sed -i 's/\r$//' ./entrypoint.sh && chmod +x ./entrypoint.sh
 
 ENV NODE_ENV=production
 ENV PORT=3001

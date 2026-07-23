@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import uuid
 import logging
 import threading
@@ -8,87 +9,85 @@ from datetime import datetime, timezone
 
 logger = logging.getLogger("AIServiceRabbitMQ")
 
+
 class RabbitMQManager:
+    """
+    AI Service RabbitMQ yöneticisi.
+
+    ÖNEMLİ: pika BlockingConnection thread-safe DEĞİLDİR. Bu yüzden publisher (HTTP istek
+    thread'leri) ile consumer (arka plan thread) AYRI bağlantılar kullanır. Aksi halde aynı
+    kanalın iki thread'den kullanılması bağlantıyı bozar (IndexError: pop from empty deque)
+    ve consumer çöker. Publisher ayrıca bir kilit (lock) ile korunur.
+    """
     _instance = None
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(RabbitMQManager, cls).__new__(cls)
-            cls._instance.connection = None
-            cls._instance.channel = None
             cls._instance.exchange = "campaigncell.events"
             cls._instance.queue_name = "q.ai.campaign-events"
+            cls._instance._pub_conn = None
+            cls._instance._pub_channel = None
+            cls._instance._pub_lock = threading.Lock()
         return cls._instance
 
+    def _url(self):
+        return os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672")
+
+    # ==========================================================
+    # PUBLISHER (HTTP thread'lerinden çağrılır — kilitli, ayrı bağlantı)
+    # ==========================================================
+    def _ensure_publisher(self):
+        if self._pub_conn is not None and self._pub_conn.is_open:
+            return
+        parameters = pika.URLParameters(self._url())
+        self._pub_conn = pika.BlockingConnection(parameters)
+        self._pub_channel = self._pub_conn.channel()
+        self._pub_channel.exchange_declare(exchange=self.exchange, exchange_type="topic", durable=True)
+
     def connect(self):
-        url = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672")
+        """Geriye dönük uyumluluk: publisher bağlantısını kurar."""
         try:
-            parameters = pika.URLParameters(url)
-            self.connection = pika.BlockingConnection(parameters)
-            self.channel = self.connection.channel()
-
-            self.channel.exchange_declare(
-                exchange=self.exchange,
-                exchange_type="topic",
-                durable=True
-            )
-
-            self.channel.queue_declare(queue=self.queue_name, durable=True)
-            
-            # Routing key binding
-            binding_keys = [
-                "campaign.created",
-                "campaign.optimization.required",
-                "segment.changed",
-                "subscriber.offer.#"
-            ]
-            for key in binding_keys:
-                self.channel.queue_bind(
-                    exchange=self.exchange,
-                    queue=self.queue_name,
-                    routing_key=key
-                )
-
-            logger.info(f"RabbitMQ bağlantısı sağlandı. Queue '{self.queue_name}' dinleniyor.")
+            self._ensure_publisher()
             return True
         except Exception as e:
-            logger.warning(f"RabbitMQ bağlantısı kurulamadı (Event işlemleri devredışı/asenkron çalışıyor): {e}")
+            logger.warning(f"RabbitMQ publisher bağlantısı kurulamadı: {e}")
             return False
 
     def publish_event(self, event_type: str, payload: dict):
-        if not self.channel or self.channel.is_closed:
-            logger.warn(f"RabbitMQ kanalı kapalı. Event '{event_type}' atlandı.")
-            return False
-
         envelope = {
-            "event_type": eventType if (eventType := event_type) else event_type,
+            "event_type": event_type,
             "event_id": str(uuid.uuid4()),
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "source": "ai-service",
             "version": "1.0",
             "payload": payload,
         }
-
-        try:
-            self.channel.basic_publish(
-                exchange=self.exchange,
-                routing_key=event_type,
-                body=json.dumps(envelope),
-                properties=pika.BasicProperties(
-                    delivery_mode=2, # persistent
-                    content_type="application/json"
+        with self._pub_lock:
+            try:
+                self._ensure_publisher()
+                self._pub_channel.basic_publish(
+                    exchange=self.exchange,
+                    routing_key=event_type,
+                    body=json.dumps(envelope),
+                    properties=pika.BasicProperties(delivery_mode=2, content_type="application/json"),
                 )
-            )
-            logger.info(f"Event [{event_type}] başarıyla yayınlandı.")
-            return True
-        except Exception as e:
-            logger.error(f"Event [{event_type}] yayınlama hatası: {e}")
-            return False
+                logger.info(f"Event [{event_type}] başarıyla yayınlandı.")
+                return True
+            except Exception as e:
+                logger.error(f"Event [{event_type}] yayınlama hatası: {e}")
+                # Bağlantıyı sıfırla → sonraki çağrı yeniden bağlanır.
+                try:
+                    if self._pub_conn and self._pub_conn.is_open:
+                        self._pub_conn.close()
+                except Exception:
+                    pass
+                self._pub_conn = None
+                self._pub_channel = None
+                return False
 
     def publish_recovered_event(self):
-        """
-        AI Servisi ayağa kalktığında Campaign Service'i bilgilendirmek için ai.service.recovered fırlatır.
-        """
+        """AI Servisi ayağa kalktığında Campaign Service'i bilgilendirir (ai.service.recovered)."""
         return self.publish_event("ai.service.recovered", {
             "service": "ai-service",
             "status": "UP",
@@ -96,31 +95,41 @@ class RabbitMQManager:
             "message": "AI Servisi aktif. Manuel optimizasyon bekleyen kampanyalar işlenebilir."
         })
 
+    # ==========================================================
+    # CONSUMER (arka plan thread — KENDİ bağlantısı + otomatik reconnect)
+    # ==========================================================
     def start_consumer(self, callback_handler):
-        """
-        Arka plan thread'inde RabbitMQ dinleyicisini çalıştırır.
-        """
-        def _consume():
-            if not self.connect():
-                return
-            
-            def _on_message(ch, method, properties, body):
-                try:
-                    data = json.loads(body)
-                    callback_handler(method.routing_key, data)
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
-                except Exception as err:
-                    logger.error(f"Mesaj işleme hatası: {err}")
-                    ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+        binding_keys = [
+            "campaign.created",
+            "campaign.optimization.required",
+            "segment.changed",
+            "subscriber.offer.#",
+        ]
 
-            self.channel.basic_consume(
-                queue=self.queue_name,
-                on_message_callback=_on_message
-            )
+        def _on_message(ch, method, properties, body):
             try:
-                self.channel.start_consuming()
-            except Exception as e:
-                logger.warning(f"RabbitMQ consumer durdu: {e}")
+                data = json.loads(body)
+                callback_handler(method.routing_key, data)
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+            except Exception as err:
+                logger.error(f"Mesaj işleme hatası: {err}")
+                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+
+        def _consume():
+            while True:
+                try:
+                    conn = pika.BlockingConnection(pika.URLParameters(self._url()))
+                    channel = conn.channel()
+                    channel.exchange_declare(exchange=self.exchange, exchange_type="topic", durable=True)
+                    channel.queue_declare(queue=self.queue_name, durable=True)
+                    for key in binding_keys:
+                        channel.queue_bind(exchange=self.exchange, queue=self.queue_name, routing_key=key)
+                    logger.info(f"RabbitMQ consumer bağlandı. Queue '{self.queue_name}' dinleniyor.")
+                    channel.basic_consume(queue=self.queue_name, on_message_callback=_on_message)
+                    channel.start_consuming()
+                except Exception as e:
+                    logger.warning(f"RabbitMQ consumer koptu, 5 sn sonra yeniden bağlanılıyor: {e}")
+                    time.sleep(5)
 
         thread = threading.Thread(target=_consume, daemon=True)
         thread.start()

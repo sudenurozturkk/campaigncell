@@ -61,6 +61,7 @@ export class FeedbackService {
       feedback_id: feedback.id,
       campaign_id: dto.campaignId,
       campaign_code: campaign.code,
+      campaign_type: campaign.type, // Case §4.5: benzer (aynı tip) kampanya skorunu düşürmek için
       target_segment: campaign.targetSegment,
       subscriber_id: subscriberId,
       expert_id: expertId,

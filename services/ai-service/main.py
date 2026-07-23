@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from app.database import engine, Base, SessionLocal
 from app.api.endpoints import router as ai_router
 from app.events.rabbitmq import RabbitMQManager
-from app.models import Prediction, PredictionCorrection, SubscriberProfile
+from app.models import Prediction, PredictionCorrection, SubscriberProfile, SubscriberTypePreference
 from app.ml.predictor import PredictorEngine
 from app.ml.expert_matcher import find_best_expert_for_case
 
@@ -33,6 +33,26 @@ def _profile_hint_for_segment(segment: str) -> dict:
                    "complaint_count": 1, "data_usage_trend_pct": -12},
     }
     return hints.get(segment, {})
+
+def _bump_type_preference(db, subscriber_id: str, campaign_type: str, accepted: bool):
+    """Case §4.5: abone × kampanya tipi kabul/ret sayacını artırır (benzer kampanya skoru için)."""
+    if not subscriber_id or not campaign_type:
+        return
+    pref = db.query(SubscriberTypePreference).filter(
+        SubscriberTypePreference.subscriber_id == subscriber_id,
+        SubscriberTypePreference.campaign_type == campaign_type,
+    ).first()
+    if not pref:
+        pref = SubscriberTypePreference(
+            subscriber_id=subscriber_id, campaign_type=campaign_type,
+            accepted_count=0, rejected_count=0,
+        )
+        db.add(pref)
+    if accepted:
+        pref.accepted_count = (pref.accepted_count or 0) + 1
+    else:
+        pref.rejected_count = (pref.rejected_count or 0) + 1
+
 
 def handle_rabbitmq_event(routing_key: str, data: dict):
     """
@@ -93,19 +113,24 @@ def handle_rabbitmq_event(routing_key: str, data: dict):
 
         elif routing_key == "subscriber.offer.accepted":
             sub_id = payload.get("subscriber_id")
+            camp_type = payload.get("campaign_type")
             if sub_id:
                 prof = db.query(SubscriberProfile).filter(SubscriberProfile.subscriber_id == sub_id).first()
                 if prof:
                     prof.past_accepted_count = (prof.past_accepted_count or 0) + 1
-                    db.commit()
+                _bump_type_preference(db, sub_id, camp_type, accepted=True)
+                db.commit()
 
         elif routing_key == "subscriber.offer.rejected":
             sub_id = payload.get("subscriber_id")
+            camp_type = payload.get("campaign_type")
             if sub_id:
                 prof = db.query(SubscriberProfile).filter(SubscriberProfile.subscriber_id == sub_id).first()
                 if prof:
                     prof.past_rejected_count = (prof.past_rejected_count or 0) + 1
-                    db.commit()
+                # Case §4.5: aynı tip kampanya reddedildi → tercih sayacı artar, benzer skorlar düşer.
+                _bump_type_preference(db, sub_id, camp_type, accepted=False)
+                db.commit()
 
     except Exception as e:
         logger.error(f"Event {routing_key} işlenirken veritabanı hatası: {e}")

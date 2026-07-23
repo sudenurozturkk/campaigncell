@@ -32,42 +32,49 @@ export default function SubscriberHistoryPage() {
   );
 }
 
+const TYPE_LABELS: Record<string, string> = {
+  EK_PAKET: 'Ek Paket', CIHAZ_FIRSATI: 'Cihaz Fırsatı', TARIFE_YUKSELTME: 'Tarife Yükseltme', SADAKAT: 'Sadakat',
+};
+
 function SubscriberHistoryPageInner() {
   const [filter, setFilter] = useState<'ALL' | 'ACCEPTED' | 'REJECTED'>('ALL');
   const [search, setSearch] = useState('');
+  const [currentUser, setCurrentUser] = useState<{ id?: string; firstName?: string; lastName?: string; gsmNumber?: string } | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const history: HistoryItem[] = [
-    {
-      id: '1', code: 'CMP-2026-000087', name: '15GB Sosyal Medya Paketi',
-      type: 'EK_PAKET', typeLabel: 'Ek Paket', discountPercent: 25, aiScore: 0.92,
-      status: 'ACCEPTED', userRating: 5, date: '2026-07-18',
-      reasoning: 'AI Analizi: Yüksek sosyal medya kullanımı tespit edildi. Instagram ve YouTube veri tüketiminiz aylık 12 GB.',
-    },
-    {
-      id: '2', code: 'CMP-2026-000072', name: 'Aile Plus Tarife Yükseltme',
-      type: 'TARIFE_YUKSELTME', typeLabel: 'Tarife Yükseltme', discountPercent: 15, aiScore: 0.78,
-      status: 'REJECTED', date: '2026-07-10',
-      reasoning: 'AI Analizi: Ev hattınızla birleşik aile paketi dönüşüm olasılığı yüksek.',
-    },
-    {
-      id: '3', code: 'CMP-2026-000058', name: 'Samsung Galaxy S26 Cihaz Fırsatı',
-      type: 'CIHAZ_FIRSATI', typeLabel: 'Cihaz Fırsatı', discountPercent: 35, aiScore: 0.88,
-      status: 'ACCEPTED', userRating: 4, date: '2026-06-28',
-      reasoning: 'AI Analizi: Cihazınız 2+ yaşında, 5G uyumlu yeni cihaz teklifi uygun görüldü.',
-    },
-    {
-      id: '4', code: 'CMP-2026-000045', name: 'Sadakat Hediyesi — Ücretsiz 10GB',
-      type: 'SADAKAT', typeLabel: 'Sadakat', discountPercent: 100, aiScore: 0.95,
-      status: 'ACCEPTED', userRating: 5, date: '2026-06-15',
-      reasoning: 'AI Analizi: 30+ ay sadık abone olarak ücretsiz 10GB hediye paketi hak edildi.',
-    },
-    {
-      id: '5', code: 'CMP-2026-000032', name: 'Uluslararası Arama Paketi',
-      type: 'EK_PAKET', typeLabel: 'Ek Paket', discountPercent: 20, aiScore: 0.65,
-      status: 'REJECTED', date: '2026-06-05',
-      reasoning: 'AI Analizi: Son 3 ayda uluslararası arama geçmişi tespit edildi.',
-    },
-  ];
+  React.useEffect(() => {
+    let id: string | undefined;
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cc_user');
+        if (stored) { const u = JSON.parse(stored); setCurrentUser(u); id = u?.id; }
+      } catch {}
+    }
+    if (!id) { setLoading(false); return; }
+    import('../../../../lib/api').then(({ api }) => {
+      api.getSubscriberHistory(id as string).then((raw: any[]) => {
+        setHistory((raw || []).map((h) => ({
+          id: h.id,
+          code: h.code,
+          name: h.name,
+          type: h.type,
+          typeLabel: TYPE_LABELS[h.type] || h.type,
+          discountPercent: Number(h.discountPercent) || 0,
+          aiScore: Number(h.aiScore) || 0,
+          status: h.status,
+          userRating: h.userRating ?? undefined,
+          date: h.date ? new Date(h.date).toLocaleDateString('tr-TR') : '-',
+          reasoning: h.reasoning || '',
+        })));
+      }).catch(() => {}).finally(() => setLoading(false));
+    });
+  }, []);
+
+  const displayName = currentUser
+    ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || 'Değerli Aboneniz'
+    : 'Değerli Aboneniz';
+  const gsmDisplay = currentUser?.gsmNumber || '—';
 
   const filtered = history
     .filter((h) => filter === 'ALL' || h.status === filter)
@@ -82,10 +89,11 @@ function SubscriberHistoryPageInner() {
 
   const accepted = history.filter((h) => h.status === 'ACCEPTED').length;
   const rejected = history.filter((h) => h.status === 'REJECTED').length;
-  const avgRating = history.filter((h) => h.userRating).reduce((sum, h) => sum + (h.userRating || 0), 0) / history.filter((h) => h.userRating).length;
+  const ratedItems = history.filter((h) => h.userRating);
+  const avgRating = ratedItems.length > 0 ? ratedItems.reduce((sum, h) => sum + (h.userRating || 0), 0) / ratedItems.length : 0;
 
   return (
-    <DashboardShell role="subscriber" userName="Ahmet Yılmaz" userDetail="0555 111 22 33 • Yüksek Değer">
+    <DashboardShell role="subscriber" userName={displayName} userDetail={`${gsmDisplay} • Turkcell Abonesi`}>
       <main className="max-w-6xl mx-auto px-6 py-8 space-y-8">
         {/* Header */}
         <div>
@@ -149,6 +157,7 @@ function SubscriberHistoryPageInner() {
 
         {/* History List */}
         <div className="space-y-4">
+          {loading && <div className="text-center py-10 text-slate-500 text-sm">Geçmiş yükleniyor...</div>}
           {filtered.map((item) => (
             <div key={item.id} className="glass-card rounded-2xl p-5 transition-all duration-300">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -194,10 +203,10 @@ function SubscriberHistoryPageInner() {
             </div>
           ))}
 
-          {filtered.length === 0 && (
+          {!loading && filtered.length === 0 && (
             <div className="text-center py-16 text-slate-500">
               <History className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Eşleşen teklif bulunamadı</p>
+              <p className="text-sm">Henüz teklif geçmişiniz yok. Fırsatlara yanıt verdikçe burada görünür.</p>
             </div>
           )}
         </div>

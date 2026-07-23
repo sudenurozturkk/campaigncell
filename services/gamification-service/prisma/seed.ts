@@ -39,7 +39,11 @@ async function main() {
     });
   }
 
-  console.log('Gamification Service Seeding Completed Successfully.');
+  // NOT: Sahte puan/leaderboard verisi KALDIRILDI. Puanlar yalnızca gerçek 'campaign.optimized'
+  // event'leriyle (uzman optimizasyonu tamamladığında) oluşur. Liderlik tablosu canlı veriyle dolar.
+  // Yalnızca rozet ve seviye TANIMLARI (case §6.2/§6.3 master config) seed edilir.
+
+  console.log('Gamification Service Seeding Completed (badges + levels only, no fake points).');
 }
 
 main()

@@ -54,34 +54,14 @@ function SubscriberDashboardContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
 
-  const [offers, setOffers] = useState<Offer[]>([
-    {
-      id: 'camp-101', code: 'CMP-2026-000101',
-      name: 'Yüksek Değerli Abone 20GB Ek Paket',
-      type: 'EK_PAKET', typeLabel: 'Ek Paket',
-      discountPercent: 30, aiScore: 94, conversionProbability: 85,
-      reasoning: 'AI Analizi: Aylık 35 GB yüksek veri tüketiminiz, 24 aylık sadakatiniz ve son 3 kampanyayı kabul etmeniz nedeniyle %30 indirimli 20GB Ek Paket önerilmiştir. Veri kullanım trendiniz aylık %15 artış göstermektedir.',
-      segment: 'YÜKSEK DEĞER', validUntil: '2026-07-31', status: 'PENDING', icon: Package,
-    },
-    {
-      id: 'camp-102', code: 'CMP-2026-000102',
-      name: 'Turkcell Super 50GB Platinum Tarife Fırsatı',
-      type: 'TARIFE_YUKSELTME', typeLabel: 'Tarife Yükseltme',
-      discountPercent: 25, aiScore: 88, conversionProbability: 78,
-      reasoning: 'AI Analizi: Mevcut tarifeniz dolmak üzeredir. Yüksek ARPU kategorisinde olduğunuz için sınırsız sosyal medya ve 50GB internet içeren Platinum tarife öncelikli sunulmuştur.',
-      segment: 'SADAKAT', validUntil: '2026-08-15', status: 'PENDING', icon: Smartphone,
-    },
-    {
-      id: 'camp-103', code: 'CMP-2026-000103',
-      name: 'Özel Dijital Servisler (TV+ & Fizy) Fırsatı',
-      type: 'SADAKAT', typeLabel: 'Sadakat / Servis',
-      discountPercent: 50, aiScore: 76, conversionProbability: 68,
-      reasoning: 'AI Analizi: Hafta sonu veri tespiti doğrultusunda TV+ ve Fizy premium dijital yayın paketi %50 indirimli tanımlanmıştır.',
-      segment: 'GENEL ABONE', validUntil: '2026-07-28', status: 'PENDING', icon: Zap,
-    },
-  ]);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const [activeTab, setActiveTab] = useState<'offers' | 'my_campaigns'>('offers');
+  const [currentUser, setCurrentUser] = useState<{ id?: string; firstName?: string; lastName?: string; gsmNumber?: string } | null>(null);
+
+  const typeLabelOf = (t: string) => t === 'EK_PAKET' ? 'Ek Paket' : t === 'TARIFE_YUKSELTME' ? 'Tarife Yükseltme' : t === 'CIHAZ_FIRSATI' ? 'Cihaz Fırsatı' : 'Sadakat';
+  const iconOf = (t: string) => t === 'EK_PAKET' ? Package : t === 'TARIFE_YUKSELTME' ? Smartphone : Zap;
 
   useEffect(() => {
     if (tabParam && (tabParam === 'offers' || tabParam === 'my_campaigns')) {
@@ -89,22 +69,79 @@ function SubscriberDashboardContent() {
     }
   }, [tabParam]);
 
-  const handleRespond = (id: string, response: 'ACCEPTED' | 'REJECTED') => {
+  useEffect(() => {
+    let userId: string | undefined;
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('cc_user');
+        if (stored) {
+          const u = JSON.parse(stored);
+          setCurrentUser(u);
+          userId = u?.id;
+        }
+      } catch {}
+    }
+
+    if (!userId) { setLoading(false); return; }
+
+    // Case §8.2: aboneye özel, AI ile skorlanmış kişisel teklifler (gerçek endpoint).
+    import('../../../lib/api').then(({ api }) => {
+      api.getSubscriberOffers(userId as string).then((raw: any[]) => {
+        const mapped: Offer[] = (raw || []).map((o) => ({
+          id: o.campaignId,
+          code: o.code,
+          name: o.name,
+          type: o.type,
+          typeLabel: typeLabelOf(o.type),
+          discountPercent: Number(o.discountPercent) || 0,
+          aiScore: o.recommendationScore != null ? Math.round(Number(o.recommendationScore) * 100) : 0,
+          conversionProbability: o.conversionProbability != null ? Math.round(Number(o.conversionProbability) * 100) : 0,
+          reasoning: o.reasoning || 'Kullanım profilinize göre AI tarafından skorlanmıştır.',
+          segment: o.predictedSegment || o.segment || '-',
+          validUntil: '-',
+          status: 'PENDING',
+          icon: iconOf(o.type),
+        }));
+        setOffers(mapped);
+      }).catch(() => {}).finally(() => setLoading(false));
+    });
+  }, []);
+
+  const handleRespond = async (id: string, response: 'ACCEPTED' | 'REJECTED') => {
+    // Case §4.5: gerçek geri bildirim backend'e gönderilir (dönüşüm verisine + AI skoruna işlenir).
+    const { api } = await import('../../../lib/api');
+    const res = await api.submitFeedback({ campaignId: id, response });
+    if (res && res.success === false) {
+      alert(res.error || 'Geri bildirim gönderilemedi.');
+      return;
+    }
     setOffers(prev => prev.map(o => o.id === id ? { ...o, status: response } : o));
   };
 
-  const handleRate = (id: string, rating: number) => {
+  const handleRate = async (id: string, rating: number) => {
+    // Case §4.6: 1-5 yıldız puan (tek seferlik) — kabul edilen teklif üzerinden gönderilir.
+    const { api } = await import('../../../lib/api');
+    const res = await api.submitFeedback({ campaignId: id, response: 'ACCEPTED', rating });
+    if (res && res.success === false) {
+      alert(res.error || 'Puanınız kaydedilemedi (zaten puanlamış olabilirsiniz).');
+      return;
+    }
     setOffers(prev => prev.map(o => o.id === id ? { ...o, userRating: rating } : o));
   };
 
   const pendingOffers = offers.filter(o => o.status === 'PENDING');
   const acceptedOffers = offers.filter(o => o.status === 'ACCEPTED');
 
+  const displayName = currentUser
+    ? `${currentUser.firstName || ''} ${currentUser.lastName || ''}`.trim() || 'Değerli Aboneniz'
+    : 'Değerli Aboneniz';
+  const gsmDisplay = currentUser?.gsmNumber || '—';
+
   return (
     <DashboardShell
       role="subscriber"
-      userName="Ahmet Yılmaz"
-      userDetail="0555 111 22 33 • Turkcell Super Paket"
+      userName={displayName}
+      userDetail={`${gsmDisplay} • Turkcell Abonesi`}
       activeTab={activeTab}
       onTabChange={setActiveTab}
     >
@@ -118,7 +155,7 @@ function SubscriberDashboardContent() {
                 <span>Turkcell Yapay Zeka Kişiselleştirme Motoru</span>
               </div>
               <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                Hoş Geldiniz, Ahmet Bey 👋
+                Hoş Geldiniz{currentUser?.firstName ? `, ${currentUser.firstName}` : ''} 👋
               </h1>
               <p className="text-xs md:text-sm text-slate-600 dark:text-slate-400 max-w-2xl font-medium">
                 Yapay zeka motorumuz kullanım alışkanlıklarınızı analiz ederek size özel <strong>{pendingOffers.length} yeni kampanya</strong> hazırladı.
@@ -126,8 +163,8 @@ function SubscriberDashboardContent() {
             </div>
             <div className="flex items-center space-x-3 bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800">
               <div className="text-right">
-                <div className="text-xs text-slate-500 font-semibold">Mevcut Tarifeniz</div>
-                <div className="text-sm font-extrabold text-turkcell-navy dark:text-turkcell-yellow">Super Paket 15GB</div>
+                <div className="text-xs text-slate-500 font-semibold">Kişisel Teklif Sayısı</div>
+                <div className="text-sm font-extrabold text-turkcell-navy dark:text-turkcell-yellow">{pendingOffers.length} Aktif Fırsat</div>
               </div>
               <div className="w-10 h-10 rounded-xl bg-turkcell-blue/10 flex items-center justify-center text-turkcell-blue">
                 <Smartphone className="w-5 h-5" />
@@ -163,11 +200,16 @@ function SubscriberDashboardContent() {
         {/* Offers tab */}
         {activeTab === 'offers' && (
           <div className="space-y-4">
-            {pendingOffers.length === 0 ? (
+            {loading ? (
+              <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-3xl p-12 text-center shadow-sm">
+                <div className="w-8 h-8 rounded-full border-4 border-slate-200 border-t-turkcell-blue animate-spin mx-auto mb-3"></div>
+                <p className="text-xs text-slate-500 font-medium">Size özel teklifler AI ile skorlanıyor...</p>
+              </div>
+            ) : pendingOffers.length === 0 ? (
               <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-3xl p-12 text-center shadow-sm">
                 <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Tüm fırsatları değerlendirdiniz!</h3>
-                <p className="text-xs text-slate-500 mt-1 font-medium">Yeni kampanya tanımlandığında SMS ve bildirim ile bilgilendirileceksiniz.</p>
+                <h3 className="text-lg font-bold text-slate-900 dark:text-white">Şu an gösterilecek kişisel teklif yok</h3>
+                <p className="text-xs text-slate-500 mt-1 font-medium">AI öneri skoru 0.60 ve üzeri kampanyalar burada listelenir. Yeni kampanya tanımlandığında bildirilirsiniz.</p>
               </div>
             ) : (
               pendingOffers.map(offer => {

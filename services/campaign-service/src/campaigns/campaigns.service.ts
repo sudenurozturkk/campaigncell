@@ -54,10 +54,65 @@ export class CampaignsService {
   }
 
   /**
+   * Case §5.3: Uzmanların GERÇEK iş yükü ve performansını (ortalama conversion_lift) kendi DB'mizden
+   * hesaplar ve AI'a taşır (database-per-service korunur — AI Campaign DB'ye erişmez).
+   *  - active_workload : ATANDI/OPTIMIZE_EDILIYOR/TEST_EDILIYOR durumdaki aktif vaka sayısı
+   *  - performance_rating : tamamlanmış vakaların ortalama conversionLift değeri
+   */
+  private async computeExpertStats(): Promise<
+    Array<{ expert_id: string; active_workload: number; performance_rating: number | null }>
+  > {
+    const activeStatuses: CaseStatusEnum[] = [
+      CaseStatusEnum.ATANDI,
+      CaseStatusEnum.OPTIMIZE_EDILIYOR,
+      CaseStatusEnum.TEST_EDILIYOR,
+    ];
+
+    const [workloadGroups, perfGroups] = await Promise.all([
+      this.prisma.optimizationCase.groupBy({
+        by: ['assignedExpertId'],
+        where: { assignedExpertId: { not: null }, status: { in: activeStatuses } },
+        _count: { _all: true },
+      }),
+      this.prisma.optimizationCase.groupBy({
+        by: ['assignedExpertId'],
+        where: { assignedExpertId: { not: null }, completedAt: { not: null } },
+        _avg: { conversionLift: true },
+      }),
+    ]);
+
+    const workloadMap = new Map<string, number>();
+    for (const g of workloadGroups) {
+      if (g.assignedExpertId) workloadMap.set(g.assignedExpertId, g._count._all);
+    }
+    const perfMap = new Map<string, number | null>();
+    for (const g of perfGroups) {
+      if (g.assignedExpertId) {
+        const avg = (g as any)._avg?.conversionLift;
+        perfMap.set(g.assignedExpertId, avg != null ? Number(avg) : null);
+      }
+    }
+
+    const expertIds = new Set<string>([...workloadMap.keys(), ...perfMap.keys()]);
+    return [...expertIds].map((id) => ({
+      expert_id: id,
+      active_workload: workloadMap.get(id) ?? 0,
+      performance_rating: perfMap.get(id) ?? null,
+    }));
+  }
+
+  /**
    * AI Service'e SENKRON öneri çağrısı (Case §4.1). 5 sn timeout.
    * Erişilemezse null döner → çağıran taraf degradation moduna geçer.
    */
-  private async requestAiPrediction(input: { code: string; type: string; requestedSegment?: string }): Promise<any | null> {
+  private async requestAiPrediction(input: {
+    code: string;
+    type: string;
+    requestedSegment?: string;
+    subscriberId?: string;
+    profileOverride?: Record<string, number>;
+    expertStats?: Array<{ expert_id: string; active_workload: number; performance_rating: number | null }>;
+  }): Promise<any | null> {
     const base = process.env.AI_SERVICE_URL || 'http://ai-service:8000';
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
@@ -66,9 +121,10 @@ export class CampaignsService {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          subscriber_id: `campaign-preview-${input.code}`,
+          subscriber_id: input.subscriberId || `campaign-preview-${input.code}`,
           campaign_type: input.type,
-          profile_override: this.buildProfileHint(input.requestedSegment),
+          profile_override: input.profileOverride ?? this.buildProfileHint(input.requestedSegment),
+          expert_stats: input.expertStats,
         }),
         signal: controller.signal,
       });
@@ -121,10 +177,13 @@ export class CampaignsService {
     const code = await this.generateUniqueCode();
 
     // Case §4.1: Kampanya segmente hedeflendiğinde AI Service'e SENKRON gönderilir.
+    // Case §5.3: uzmanların gerçek iş yükü/performansı da AI'a taşınır (akıllı atama için).
+    const expertStats = await this.computeExpertStats();
     const ai = await this.requestAiPrediction({
       code,
       type: dto.type,
       requestedSegment: dto.targetSegment,
+      expertStats,
     });
     const aiAvailable = !!ai;
 
@@ -263,6 +322,116 @@ export class CampaignsService {
     }
 
     return { ...campaign, optimizationCaseId: optCase.id, aiAvailable };
+  }
+
+  /**
+   * Case §8.2 & §5.1: Aboneye özel teklifler — GET /api/v1/subscribers/:id/offers.
+   * Aktif kampanyalar, abonenin GERÇEK profiline göre AI ile skorlanır; skor >= 0.60 olanlar
+   * gösterilir, > 0.80 olanlar öncelikli işaretlenir. AI erişilemezse degradation modunda
+   * kampanyalar skorsuz döner (servis bağımsızlığı — Case §2.2).
+   */
+  async getOffersForSubscriber(subscriberId: string) {
+    // Aktif kampanyaları çek (aboneye yayınlanabilir olanlar). Aşırı AI çağrısını önlemek için son 20.
+    const campaigns = await this.prisma.campaign.findMany({
+      where: { status: CampaignStatusEnum.ACTIVE },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+    });
+
+    const offers: any[] = [];
+    let aiAvailable = true;
+
+    for (const c of campaigns) {
+      const ai = await this.requestAiPrediction({
+        code: c.code,
+        type: c.type,
+        subscriberId, // abonenin GERÇEK profili AI DB'sinden okunur → kişiye özel skor
+      });
+
+      if (!ai) {
+        aiAvailable = false;
+        // Degradation: skorsuz temel teklif (bağımsızlık). Eşik filtrelenemediği için gösterilir.
+        offers.push({
+          campaignId: c.id,
+          code: c.code,
+          name: c.name,
+          type: c.type,
+          discountPercent: c.discountPercent,
+          recommendationScore: null,
+          conversionProbability: null,
+          priorityDisplay: false,
+          reasoning: 'AI Service erişilemedi — teklif skorsuz gösteriliyor (degradation).',
+        });
+        continue;
+      }
+
+      // Case §5.1: skor < 0.60 ise aboneye GÖSTERİLMEZ.
+      if (!ai.show_to_subscriber) continue;
+
+      offers.push({
+        campaignId: c.id,
+        code: c.code,
+        name: c.name,
+        type: c.type,
+        discountPercent: c.discountPercent,
+        recommendationScore: ai.recommendation_score,
+        conversionProbability: ai.conversion_probability,
+        predictedSegment: ai.predicted_segment,
+        priorityDisplay: ai.priority_display, // skor > 0.80 → öncelikli
+        reasoning: ai.reasoning,
+      });
+    }
+
+    // Skor sırasına göre (öncelikliler üstte). Skorsuz (degradation) sona.
+    offers.sort((a, b) => (b.recommendationScore ?? -1) - (a.recommendationScore ?? -1));
+
+    return {
+      subscriberId,
+      aiAvailable,
+      total: offers.length,
+      offers,
+    };
+  }
+
+  /**
+   * Abonenin GERÇEK teklif geçmişi (verdiği kabul/ret + puanlar). GET /subscribers/:id/history.
+   */
+  async getSubscriberHistory(subscriberId: string) {
+    const feedbacks = await this.prisma.subscriberFeedback.findMany({
+      where: { subscriberId },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    const campaignIds = [...new Set(feedbacks.map((f) => f.campaignId))];
+    const campaigns = await this.prisma.campaign.findMany({
+      where: { id: { in: campaignIds } },
+      select: {
+        id: true, code: true, name: true, type: true, description: true,
+        discountPercent: true, aiRecommendationScore: true,
+      },
+    });
+    const cMap = new Map(campaigns.map((c) => [c.id, c]));
+
+    const items = feedbacks.map((f) => {
+      const c = cMap.get(f.campaignId);
+      return {
+        id: f.id,
+        campaignId: f.campaignId,
+        code: c?.code ?? '-',
+        name: c?.name ?? 'Kampanya',
+        type: c?.type ?? '-',
+        discountPercent: Number(c?.discountPercent ?? 0),
+        aiScore: Number(c?.aiRecommendationScore ?? 0),
+        status: f.response,
+        userRating: f.rating ?? null,
+        rejectionReason: f.rejectionReason ?? null,
+        reasoning: c?.description ?? '',
+        date: f.createdAt.toISOString(),
+      };
+    });
+
+    return { subscriberId, total: items.length, items };
   }
 
   async findAll(query: QueryCampaignDto) {

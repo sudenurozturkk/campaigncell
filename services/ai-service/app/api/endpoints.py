@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from app.database import get_db
-from app.models import SubscriberProfile, Prediction, ModelVersion, PredictionCorrection, TrainingRun
+from app.models import SubscriberProfile, Prediction, ModelVersion, PredictionCorrection, TrainingRun, SubscriberTypePreference
 from app.schemas import (
     RecommendRequest, RecommendResponse, ExpertScoreInfo,
     TrainModelRequest, TrainModelResponse,
@@ -55,31 +55,56 @@ def recommend_campaign(req: RecommendRequest, db: Session = Depends(get_db)):
     elif req.profile_override:
         features = req.profile_override.model_dump()
     else:
-        # Varsayılan profil
+        # Uydurma varsayılan profil YOK. Profili olmayan abone için sıfır (kullanım kaydı yok) kullanılır.
+        # Böylece skor gerçek profil girilene kadar düşük kalır (kişiselleştirme uydurulmaz).
         features = {
-            'monthly_data_usage_gb': 15.0,
-            'monthly_voice_min': 600.0,
-            'monthly_spend_try': 280.0,
-            'tenure_months': 18,
-            'past_accepted_count': 2,
-            'past_rejected_count': 1,
+            'monthly_data_usage_gb': 0.0,
+            'monthly_voice_min': 0.0,
+            'monthly_spend_try': 0.0,
+            'tenure_months': 0,
+            'past_accepted_count': 0,
+            'past_rejected_count': 0,
             'complaint_count': 0,
-            'data_usage_trend_pct': 10.0,
+            'data_usage_trend_pct': 0.0,
         }
 
     # 2. AI Tahmini Üret (kampanya tipi skoru etkiler → her kampanya için farklı skor)
     engine = PredictorEngine()
     prediction_result = engine.predict(features, campaign_type=req.campaign_type)
 
-    # Case §5.1 eşikleri: skor < 0.60 gösterilmez, > 0.80 öncelikli
     rec_score = prediction_result['recommendation_score']
+
+    # Case §4.5: Abone bu tip kampanyayı geçmişte reddettiyse benzer kampanyaların skoru DÜŞER
+    # (kabul ettiyse hafif artar). Abone × kampanya tipi tercih geçmişine dayalı gerçek modülasyon.
+    if req.campaign_type:
+        pref = db.query(SubscriberTypePreference).filter(
+            SubscriberTypePreference.subscriber_id == req.subscriber_id,
+            SubscriberTypePreference.campaign_type == req.campaign_type,
+        ).first()
+        if pref:
+            # Her ret -0.05 (max -0.30), her kabul +0.03 (max +0.15) → [0.05, 0.99] içinde kırpılır.
+            penalty = min(0.30, (pref.rejected_count or 0) * 0.05)
+            bonus = min(0.15, (pref.accepted_count or 0) * 0.03)
+            rec_score = float(min(0.99, max(0.05, rec_score - penalty + bonus)))
+            if penalty > 0:
+                prediction_result['reasoning'] += (
+                    f" (Not: Abone bu tip [{req.campaign_type}] kampanyayı geçmişte "
+                    f"{pref.rejected_count} kez reddetti → öneri skoru düşürüldü.)"
+                )
+
+    # Case §5.1 eşikleri: skor < 0.60 gösterilmez, > 0.80 öncelikli
     show_to_subscriber = rec_score >= 0.60
     priority_display = rec_score > 0.80
 
     # 3. Uzman Önerisi Hesapla (Case §5.3 formülü + kapasite/kuyruk)
+    # Campaign Service kendi DB'sinden gelen gerçek iş yükü/performansını geçtiyse onu kullan.
+    workloads_map = {s.expert_id: s.active_workload for s in (req.expert_stats or [])}
+    performance_map = {s.expert_id: s.performance_rating for s in (req.expert_stats or []) if s.performance_rating is not None}
     best_expert = find_best_expert_for_case(
         target_segment=prediction_result['predicted_segment'],
-        campaign_type=req.campaign_type or "EK_PAKET"
+        campaign_type=req.campaign_type or "EK_PAKET",
+        workloads=workloads_map or None,
+        performance_overrides=performance_map or None,
     )
     expert_info = None
     recommended_expert_id = None
@@ -259,18 +284,19 @@ def get_feature_importances():
 def get_subscriber_profile(subscriber_id: str, db: Session = Depends(get_db)):
     profile = db.query(SubscriberProfile).filter(SubscriberProfile.subscriber_id == subscriber_id).first()
     if not profile:
-        # Otomatik varsayılan profil oluştur
+        # Uydurma kullanım verisi YOK. Profil henüz girilmemişse SIFIR değerlerle oluşturulur
+        # (gerçek veri PUT ile güncellenir). Böylece sahte 18.5GB gibi değerler asla gösterilmez.
         profile = SubscriberProfile(
             subscriber_id=subscriber_id,
-            current_tariff="Turkcell Super Paket 15GB",
-            monthly_data_usage_gb=18.5,
-            monthly_voice_min=750.0,
-            monthly_spend_try=320.0,
-            tenure_months=24,
-            past_accepted_count=2,
-            past_rejected_count=1,
+            current_tariff=None,
+            monthly_data_usage_gb=0.0,
+            monthly_voice_min=0.0,
+            monthly_spend_try=0.0,
+            tenure_months=0,
+            past_accepted_count=0,
+            past_rejected_count=0,
             complaint_count=0,
-            data_usage_trend_pct=12.0
+            data_usage_trend_pct=0.0
         )
         db.add(profile)
         db.commit()

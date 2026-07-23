@@ -67,6 +67,10 @@ function AdminDashboardContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<Role | 'ALL'>('ALL');
 
+  // Canlı mikroservis sağlık durumu (uydurma metrik yok — gerçek ping + ölçülen gecikme).
+  const [health, setHealth] = useState<Record<string, { up: boolean; latency: number | null }>>({});
+  const [healthChecking, setHealthChecking] = useState(false);
+
   useEffect(() => {
     if (tabParam && ['users', 'create', 'audit', 'system'].includes(tabParam)) {
       setActiveTab(tabParam as typeof activeTab);
@@ -108,20 +112,45 @@ function AdminDashboardContent() {
       if (statsRes.ok) { const d = await statsRes.json(); setStats(d.data || d); }
       if (logsRes.ok) { const d = await logsRes.json(); setAuditLogs(d.data || []); }
     } catch {
-      // Mock fallback for demo
-      setStats({ totalUsers: 8, experts: 3, supervisors: 2, admins: 1, subscribers: 2, lockedAccounts: 0 });
-      setUsers([
-        { id: '1', role: 'ADMIN', email: 'admin@turkcell.com.tr', firstName: 'Sistem', lastName: 'Yöneticisi', expertiseTags: [], isLocked: false, createdAt: new Date().toISOString() },
-        { id: '2', role: 'SUPERVISOR', email: 'supervisor@turkcell.com.tr', firstName: 'Süpervizör', lastName: 'Kaya', expertiseTags: [], isLocked: false, createdAt: new Date().toISOString() },
-        { id: '3', role: 'CAMPAIGN_EXPERT', email: 'uzman@turkcell.com.tr', firstName: 'Ahmet', lastName: 'Yılmaz', expertiseTags: ['CHURN_PREVENTION', 'RISKLI_KAYIP'], region: 'İstanbul', isLocked: false, createdAt: new Date().toISOString() },
-        { id: '4', role: 'SUBSCRIBER', gsmNumber: '05551112233', firstName: 'Müşteri', lastName: 'Demo', expertiseTags: [], isLocked: false, createdAt: new Date().toISOString() },
-      ]);
+      // Sahte mock fallback YOK — servis erişilemezse liste boş kalır (dürüst durum).
+      setUsers([]);
+      setStats(null);
+      setAuditLogs([]);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => { loadData(); }, []);
+
+  // Her servis için gateway üzerinden gerçek bir uç noktayı yoklar; 5xx/ağ hatası → DOWN.
+  const SERVICES: { key: string; name: string; port: string; db: string; url: string }[] = [
+    { key: 'gateway', name: 'API Gateway', port: '8080', db: '—', url: `${API_GW}/api/v1/health` },
+    { key: 'identity', name: 'Identity Service', port: '3001', db: 'identity-db (5433)', url: `${API_GW}/api/v1/admin/stats` },
+    { key: 'campaign', name: 'Campaign Service', port: '3002', db: 'campaign-db (5434)', url: `${API_GW}/api/v1/campaigns?limit=1` },
+    { key: 'ai', name: 'AI Machine Learning', port: '8000', db: 'ai-db (5435)', url: `${API_GW}/api/v1/ai/health` },
+    { key: 'gamification', name: 'Gamification Service', port: '3003', db: 'gamification-db (5436)', url: `${API_GW}/api/v1/game/leaderboard?period=ALL_TIME` },
+  ];
+
+  const checkHealth = async () => {
+    setHealthChecking(true);
+    const results: Record<string, { up: boolean; latency: number | null }> = {};
+    await Promise.all(SERVICES.map(async (s) => {
+      const t0 = performance.now();
+      try {
+        const res = await fetch(s.url, { headers });
+        const latency = Math.round(performance.now() - t0);
+        // 503 = gateway hedefe ulaşamadı (servis down). Diğer tüm yanıtlar (200/401/403) servis ayakta demek.
+        results[s.key] = { up: res.status !== 503 && res.status < 500, latency };
+      } catch {
+        results[s.key] = { up: false, latency: null };
+      }
+    }));
+    setHealth(results);
+    setHealthChecking(false);
+  };
+
+  useEffect(() => { if (activeTab === 'system') checkHealth(); /* eslint-disable-line react-hooks/exhaustive-deps */ }, [activeTab]);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -141,10 +170,11 @@ function AdminDashboardContent() {
         setForm({ firstName: '', lastName: '', email: '', password: '', role: 'CAMPAIGN_EXPERT', expertiseTags: [], region: '' });
         loadData();
       } else {
-        setCreateError(data.message || 'Hesap oluşturulurken hata oluştu.');
+        setCreateError(data?.error?.message || data.message || 'Hesap oluşturulurken hata oluştu.');
       }
     } catch {
-      setCreateSuccess(`✓ ${form.firstName} ${form.lastName} (${form.role}) hesabı sisteme eklendi.`);
+      // Sahte başarı mesajı YOK.
+      setCreateError('Sunucuya ulaşılamadı. Hesap oluşturulamadı.');
     } finally {
       setIsCreating(false);
     }
@@ -570,48 +600,66 @@ function AdminDashboardContent() {
           </div>
         )}
 
-        {/* System Performance Tab */}
+        {/* System Performance Tab — CANLI health check (uydurma metrik yok) */}
         {activeTab === 'system' && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {[
-                { label: 'API Gateway SLA (Latency)', val: '14 ms', desc: 'Ort. Yanıt Süresi (Hedef: <50ms)', icon: Server, color: 'text-emerald-600 dark:text-emerald-400' },
-                { label: 'RabbitMQ Event Queue', val: '0 Bekleyen', desc: 'Canlı Mesaj Kuyruğu Durumu', icon: Database, color: 'text-turkcell-blue dark:text-turkcell-yellow' },
-                { label: 'Mikroservis Health Check', val: '4/4 Servis Aktif', desc: 'Identity, Campaign, AI, Gamification', icon: ShieldCheck, color: 'text-purple-600 dark:text-purple-400' },
-                { label: 'Veritabanı Konteynerleri', val: '4/4 PostgreSQL', desc: 'Database-per-service Mimarisi', icon: Activity, color: 'text-red-600 dark:text-red-400' },
-              ].map((kpi, i) => (
-                <div key={i} className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-500 uppercase">{kpi.label}</span>
-                    <kpi.icon className={`w-5 h-5 ${kpi.color}`} />
-                  </div>
-                  <div className={`text-2xl font-black ${kpi.color}`}>{kpi.val}</div>
-                  <div className="text-[11px] text-slate-500 font-medium">{kpi.desc}</div>
+            {(() => {
+              const upCount = SERVICES.filter(s => health[s.key]?.up).length;
+              const checked = Object.keys(health).length > 0;
+              const gwLatency = health['gateway']?.latency;
+              const kpis = [
+                { label: 'Aktif Servis', val: checked ? `${upCount}/${SERVICES.length}` : '—', desc: 'Gateway üzerinden canlı yoklama', icon: ShieldCheck, color: upCount === SERVICES.length ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400' },
+                { label: 'Gateway Gecikmesi', val: gwLatency != null ? `${gwLatency} ms` : '—', desc: 'Ölçülen gerçek yanıt süresi', icon: Server, color: 'text-turkcell-blue dark:text-turkcell-yellow' },
+                { label: 'Veritabanı Mimarisi', val: '4× PostgreSQL', desc: 'Database-per-service', icon: Database, color: 'text-purple-600 dark:text-purple-400' },
+                { label: 'Son Kontrol', val: checked ? 'Canlı' : '—', desc: healthChecking ? 'Yoklanıyor...' : 'Yenile ile güncelle', icon: Activity, color: 'text-red-600 dark:text-red-400' },
+              ];
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {kpis.map((kpi, i) => (
+                    <div key={i} className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-500 uppercase">{kpi.label}</span>
+                        <kpi.icon className={`w-5 h-5 ${kpi.color}`} />
+                      </div>
+                      <div className={`text-2xl font-black ${kpi.color}`}>{kpi.val}</div>
+                      <div className="text-[11px] text-slate-500 font-medium">{kpi.desc}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })()}
 
             <div className="bg-white dark:bg-[#0C1222] border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Mikroservis ve Altyapı Sağlık Durumu (System Health)</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {[
-                  { name: 'Identity Service', port: '3001', db: 'identity-db (5433)', status: 'SAĞLIKLI (UP)', uptime: '%99.99' },
-                  { name: 'Campaign Service', port: '3002', db: 'campaign-db (5434)', status: 'SAĞLIKLI (UP)', uptime: '%99.95' },
-                  { name: 'Gamification Service', port: '3003', db: 'gamification-db (5436)', status: 'SAĞLIKLI (UP)', uptime: '%100.00' },
-                  { name: 'AI Machine Learning', port: '8000', db: 'ai-db (5435)', status: 'SAĞLIKLI (UP)', uptime: '%99.90' },
-                ].map((s, idx) => (
-                  <div key={idx} className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-slate-900 dark:text-white">{s.name}</span>
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">
-                        {s.status}
-                      </span>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">Mikroservis Sağlık Durumu (Canlı Health Check)</h3>
+                <button onClick={checkHealth} disabled={healthChecking} className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 disabled:opacity-60">
+                  {healthChecking ? 'Yoklanıyor...' : 'Yenile'}
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                {SERVICES.map((s) => {
+                  const h = health[s.key];
+                  const up = h?.up;
+                  return (
+                    <div key={s.key} className="p-4 bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-900 dark:text-white">{s.name}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-extrabold ${
+                          up === undefined ? 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                            : up ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
+                            : 'bg-rose-100 dark:bg-rose-500/15 text-rose-700 dark:text-rose-400'
+                        }`}>
+                          {up === undefined ? '—' : up ? 'UP' : 'DOWN'}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500">Port: <span className="font-mono text-slate-900 dark:text-white">{s.port}</span></div>
+                      <div className="text-[11px] text-slate-500">DB: <span className="font-mono text-slate-900 dark:text-white">{s.db}</span></div>
+                      <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                        {h?.latency != null ? `${h.latency} ms` : up === false ? 'Yanıt yok' : '—'}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-slate-500">Port: <span className="font-mono text-slate-900 dark:text-white">{s.port}</span></div>
-                    <div className="text-[11px] text-slate-500">DB: <span className="font-mono text-slate-900 dark:text-white">{s.db}</span></div>
-                    <div className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">Uptime: {s.uptime}</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>

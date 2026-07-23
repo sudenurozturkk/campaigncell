@@ -24,20 +24,54 @@ async function main() {
     },
   });
 
-  // 2. Campaign Expert User
-  await prisma.user.upsert({
-    where: { email: 'uzman@turkcell.com.tr' },
-    update: {},
-    create: {
-      role: RoleEnum.CAMPAIGN_EXPERT,
+  // 2. Campaign Expert Users — sabit UUID'ler Gamification seed'iyle HİZALIDIR
+  // (liderlik tablosunda isim çözümlenir + AI akıllı ataması gerçek segment-uzman verisiyle çalışır).
+  const experts = [
+    {
+      id: 'a0000000-0000-0000-0000-000000000001',
       email: 'uzman@turkcell.com.tr',
-      passwordHash,
       firstName: 'Ahmet',
-      lastName: 'Yılmaz (Uzman)',
+      lastName: 'Yılmaz',
       region: 'İstanbul',
-      expertiseTags: ['Churn Önleme', 'Ek Paket', 'Tarife Yükseltme'],
+      // RISKLI_KAYIP / churn uzmanı (leaderboard #1)
+      expertiseTags: ['Churn Önleme', 'RISKLI_KAYIP', 'Sadakat'],
     },
-  });
+    {
+      id: 'a0000000-0000-0000-0000-000000000002',
+      email: 'uzman2@turkcell.com.tr',
+      firstName: 'Zeynep',
+      lastName: 'Kaya',
+      region: 'Ankara',
+      // YUKSEK_DEGER / tarife uzmanı (leaderboard #2)
+      expertiseTags: ['YUKSEK_DEGER', 'Tarife Yükseltme', 'Sadakat'],
+    },
+    {
+      id: 'a0000000-0000-0000-0000-000000000003',
+      email: 'uzman3@turkcell.com.tr',
+      firstName: 'Mehmet',
+      lastName: 'Demir',
+      region: 'İzmir',
+      // YENI_ABONE / ek paket uzmanı (leaderboard #3)
+      expertiseTags: ['YENI_ABONE', 'Ek Paket', 'PASIF'],
+    },
+  ];
+
+  for (const e of experts) {
+    await prisma.user.upsert({
+      where: { email: e.email },
+      update: { expertiseTags: e.expertiseTags, region: e.region },
+      create: {
+        id: e.id,
+        role: RoleEnum.CAMPAIGN_EXPERT,
+        email: e.email,
+        passwordHash,
+        firstName: e.firstName,
+        lastName: e.lastName,
+        region: e.region,
+        expertiseTags: e.expertiseTags,
+      },
+    });
+  }
 
   // 3. Supervisor User
   await prisma.user.upsert({
